@@ -51,6 +51,7 @@ import { uploadAudioAction } from "@/features/editor/components/audio/upload-aud
 import { uploadAttachmentAction } from "@/features/editor/components/attachment/upload-attachment-action.tsx";
 import { uploadPdfAction } from "@/features/editor/components/pdf/upload-pdf-action.tsx";
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
+import { liveBlockHostModeOf } from "@/features/live-block/live-block-host";
 import IconMermaid from "@/components/icons/icon-mermaid";
 import IconDrawio from "@/components/icons/icon-drawio";
 import { IconColumns4 } from "@/components/icons/icon-columns-4";
@@ -119,6 +120,16 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       command: ({ editor, range }: CommandProps) => {
         editor.chain().focus().deleteRange(range).toggleTaskList().run();
       },
+    },
+    {
+      title: "To-do board",
+      description: "Plan tasks on cards that everyone can edit at once",
+      searchTerms: ["todo", "tasks", "checklist", "kanban"],
+      icon: IconLayoutKanban,
+      // live blocks need a page to belong to
+      disable: (editor) => liveBlockHostModeOf(editor) !== "page",
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setTodoBoard().run(),
     },
     {
       title: "Heading 1",
@@ -546,6 +557,25 @@ const CommandGroups: SlashMenuGroupedItemsType = {
       icon: IconExcalidraw,
       command: ({ editor, range }: CommandProps) =>
         editor.chain().focus().deleteRange(range).setExcalidraw().run(),
+    },
+    {
+      title: "Whiteboard",
+      description: "Draw together on a live whiteboard",
+      searchTerms: ["diagrams", "draw", "sketch", "whiteboard"],
+      icon: IconExcalidraw,
+      // live blocks need a page to belong to
+      disable: (editor) => liveBlockHostModeOf(editor) !== "page",
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setWhiteboard().run(),
+    },
+    {
+      title: "Spreadsheet",
+      description: "Work on a spreadsheet together",
+      searchTerms: ["sheet", "spreadsheet", "excel", "grid"],
+      icon: IconTable,
+      disable: (editor) => liveBlockHostModeOf(editor) !== "page",
+      command: ({ editor, range }: CommandProps) =>
+        editor.chain().focus().deleteRange(range).setSheet().run(),
     },
     {
       title: "Date",

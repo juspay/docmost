@@ -30,6 +30,11 @@ import { sql } from 'kysely';
 import { TransclusionService } from '../page/transclusion/transclusion.service';
 import { TransclusionLookup } from '../page/transclusion/transclusion.types';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
+import {
+  lifetimeUntil,
+  ShareExpiredException,
+  ShareExpiryService,
+} from '../share-expiry/share-expiry.service';
 
 @Injectable()
 export class ShareService {
@@ -42,6 +47,7 @@ export class ShareService {
     @InjectKysely() private readonly db: KyselyDB,
     private readonly tokenService: TokenService,
     private readonly transclusionService: TransclusionService,
+    private readonly shareExpiryService: ShareExpiryService,
   ) {}
 
   async getShares(userId: string, pagination: PaginationOptions) {
@@ -52,10 +58,40 @@ export class ShareService {
         userId,
       }),
     );
-    result.items = result.items.filter((share) =>
-      accessiblePageIds.has(share.pageId),
-    );
+    const now = Date.now();
+    result.items = result.items
+      .filter((share) => accessiblePageIds.has(share.pageId))
+      .map((share) => ({
+        ...share,
+        expiresAt: share.expiresAt ?? null,
+        periodDays: share.periodDays ?? null,
+        expired: share.expiresAt
+          ? new Date(share.expiresAt).getTime() <= now
+          : false,
+      }));
     return result;
+  }
+
+  /**
+   * Throws SHARE_EXPIRED unless the share is still usable. The slug id in the
+   * body is the share's root page, which is where a signed-in person is sent.
+   */
+  async assertShareUsable(share: { id: string; pageId: string }) {
+    // Today's answers for a restricted page win over the expiry answer.
+    if (
+      share.pageId &&
+      (await this.pagePermissionRepo.hasRestrictedAncestor(share.pageId))
+    ) {
+      return;
+    }
+    if (await this.shareExpiryService.isUsable(share.id)) return;
+    const root = share.pageId
+      ? await this.pageRepo.findById(share.pageId)
+      : undefined;
+    if (!root?.slugId) {
+      throw new NotFoundException('Share not found');
+    }
+    throw new ShareExpiredException(root.slugId);
   }
 
   async getShareTree(shareId: string, workspaceId: string) {
@@ -70,6 +106,13 @@ export class ShareService {
     if (isRestricted) {
       throw new NotFoundException('Share not found');
     }
+
+    // Sub-pages covered by another, still usable share are reached through
+    // that share's own link, not through this tree.
+    if (!(await this.isSharingAllowed(workspaceId, share.spaceId))) {
+      throw new NotFoundException('Share not found');
+    }
+    await this.assertShareUsable(share);
 
     if (share.includeSubPages) {
       const pageTree =
@@ -143,12 +186,9 @@ export class ShareService {
     }
 
     const includeContent = opts?.includeContent !== false;
-    const page = includeContent
-      ? await this.pageRepo.findById(dto.pageId, {
-          includeContent: true,
-          includeCreator: true,
-        })
-      : await this.pageRepo.findById(dto.pageId);
+    // Content is read only after the expiry check, so an expired link never
+    // loads it or mints a token for it.
+    const page = await this.pageRepo.findById(dto.pageId);
 
     if (!page || page.deletedAt) {
       throw new NotFoundException('Shared page not found');
@@ -162,21 +202,55 @@ export class ShareService {
       throw new NotFoundException('Shared page not found');
     }
 
-    if (includeContent) {
-      page.content = await this.updatePublicAttachments(page);
-      page.coverPhoto = await this.updatePublicCoverPhoto(page);
+    // Every existing refusal wins over the expiry answer.
+    if (!(await this.isSharingAllowed(workspaceId, share.spaceId))) {
+      throw new NotFoundException('Shared page not found');
+    }
+    if (share.expired) {
+      throw new ShareExpiredException(page.slugId);
     }
 
-    return { page, share };
+    if (!includeContent) {
+      return { page, share };
+    }
+
+    const fullPage = await this.pageRepo.findById(page.id, {
+      includeContent: true,
+      includeCreator: true,
+    });
+    if (!fullPage || fullPage.deletedAt) {
+      throw new NotFoundException('Shared page not found');
+    }
+
+    const tokenLifetime = await this.shareExpiryService.attachmentTokenLifetime(
+      share.id,
+    );
+    fullPage.content = await this.updatePublicAttachments(fullPage, {
+      tokenLifetime,
+    });
+    fullPage.coverPhoto = await this.updatePublicCoverPhoto(fullPage, {
+      tokenLifetime,
+    });
+
+    return { page: fullPage, share };
   }
 
-  async getShareForPage(pageId: string, workspaceId: string) {
-    // here we try to check if a page was shared directly or if it inherits the share from its closest shared ancestor
-    const share = await this.db
+  async getShareForPage(
+    pageId: string,
+    workspaceId: string,
+    opts?: { preferOwn?: boolean },
+  ) {
+    // A page is reachable through its own share or through an ancestor's share
+    // that includes sub-pages. The walk continues past an expired share that
+    // covers the page, so a live share further up can still serve it; a share
+    // that does not cover the page ends the walk, as it always has.
+    const now = new Date();
+    const rows = await this.db
       .withRecursive('page_hierarchy', (cte) =>
         cte
           .selectFrom('pages')
           .leftJoin('shares', 'shares.pageId', 'pages.id')
+          .leftJoin('shareExpiries', 'shareExpiries.shareId', 'shares.id')
           .select([
             'pages.id',
             'pages.slugId',
@@ -193,6 +267,8 @@ export class ShareService {
             'shares.spaceId',
             'shares.workspaceId',
             'shares.createdAt',
+            'shareExpiries.expiresAt',
+            'shareExpiries.periodDays',
           ])
           .where(isValidUUID(pageId) ? 'pages.id' : 'pages.slugId', '=', pageId)
           .where('pages.deletedAt', 'is', null)
@@ -202,6 +278,7 @@ export class ShareService {
                 .selectFrom('pages as p')
                 .innerJoin('page_hierarchy as ph', 'ph.parentPageId', 'p.id')
                 .leftJoin('shares as s', 's.pageId', 'p.id')
+                .leftJoin('shareExpiries as se', 'se.shareId', 's.id')
                 .select([
                   'p.id',
                   'p.slugId',
@@ -218,24 +295,44 @@ export class ShareService {
                   's.spaceId',
                   's.workspaceId',
                   's.createdAt',
+                  'se.expiresAt',
+                  'se.periodDays',
                 ])
                 .where('p.deletedAt', 'is', null)
                 .whereRef('p.spaceId', '=', 'ph.pageSpaceId')
-                .where(sql`ph.share_id`, 'is', null) // stop if share found
+                // stop at a usable share, or at one that does not cover the page
+                .where(
+                  sql<boolean>`(ph.share_id is null or (ph.expires_at <= ${now}::timestamptz and (ph.level = 0 or ph.include_sub_pages)))`,
+                )
                 .where(sql`ph.level`, '<', sql`25`), // prevent loop
           ),
       )
       .selectFrom('page_hierarchy')
       .selectAll()
       .where('shareId', 'is not', null)
-      .limit(1)
-      .executeTakeFirst();
+      .orderBy('level', 'asc')
+      .execute();
 
-    if (!share || share.workspaceId !== workspaceId) {
-      return undefined;
+    let share: (typeof rows)[number] | undefined;
+    let nearestExpired: (typeof rows)[number] | undefined;
+    for (const row of rows) {
+      if ((row.level as number) > 0 && !row.includeSubPages) break;
+      if (row.expiresAt && new Date(row.expiresAt) <= now) {
+        nearestExpired ??= row;
+        continue;
+      }
+      share = row;
+      break;
+    }
+    let expired = !share;
+    share ??= nearestExpired;
+    // Whoever manages a page must always see its own link, expired or not.
+    if (opts?.preferOwn && (rows[0]?.level as number) === 0) {
+      share = rows[0];
+      expired = Boolean(share.expiresAt && new Date(share.expiresAt) <= now);
     }
 
-    if ((share.level as number) > 0 && !share.includeSubPages) {
+    if (!share || share.workspaceId !== workspaceId) {
       return undefined;
     }
 
@@ -250,6 +347,9 @@ export class ShareService {
       workspaceId: share.workspaceId,
       createdAt: share.createdAt,
       level: share.level,
+      expiresAt: share.expiresAt ? new Date(share.expiresAt) : null,
+      periodDays: share.periodDays ?? null,
+      expired,
       sharedPage: {
         id: share.id,
         slugId: share.slugId,
@@ -346,6 +446,10 @@ export class ShareService {
     if (!sharingAllowed) {
       throw new NotFoundException('Share not found');
     }
+    await this.assertShareUsable(share);
+    const hostLifetime = await this.shareExpiryService.attachmentTokenLifetime(
+      share.id,
+    );
 
     const candidatePageIds = Array.from(
       new Set(references.map((r) => r.sourcePageId)),
@@ -375,10 +479,23 @@ export class ShareService {
     // Per-page chains run in parallel; wall time is the slowest chain, not
     // the sum. Each chain still does its 2–3 queries sequentially because
     // each step gates the next.
+    // A file inside a source block must not outlive the host link or the
+    // source's own share, whichever ends first.
+    const tokenLifetimes = new Map<string, number | undefined>();
     const accessibleResults = await Promise.all(
       candidatePageIds.map(async (pageId) => {
         const sourceShare = await this.getShareForPage(pageId, workspaceId);
-        if (!sourceShare) return null;
+        if (!sourceShare || sourceShare.expired) return null;
+        const sourceLifetime = sourceShare.expiresAt
+          ? lifetimeUntil(sourceShare.expiresAt, new Date())
+          : undefined;
+        tokenLifetimes.set(
+          pageId,
+          [hostLifetime, sourceLifetime].reduce<number | undefined>(
+            (min, v) => (v === undefined ? min : Math.min(min ?? v, v)),
+            undefined,
+          ),
+        );
         if (!(await isSharingAllowedFor(sourceShare.spaceId))) return null;
         const restricted =
           await this.pagePermissionRepo.hasRestrictedAncestor(pageId);
@@ -397,7 +514,11 @@ export class ShareService {
     );
 
     return {
-      items: await this.sanitizeTransclusionItemsForPublic(items, workspaceId),
+      items: await this.sanitizeTransclusionItemsForPublic(
+        items,
+        workspaceId,
+        (sourcePageId) => tokenLifetimes.get(sourcePageId),
+      ),
     };
   }
 
@@ -426,16 +547,23 @@ export class ShareService {
     return !workspaceDisabled && !spaceDisabled;
   }
 
-  async updatePublicAttachments(page: Page): Promise<any> {
+  async updatePublicAttachments(
+    page: Page,
+    opts?: { tokenLifetime?: number },
+  ): Promise<any> {
     const doc = await this.prepareContentForShare(
       page.content,
       page.id,
       page.workspaceId,
+      opts?.tokenLifetime,
     );
     return doc.toJSON();
   }
 
-  async updatePublicCoverPhoto(page: Page): Promise<string | null> {
+  async updatePublicCoverPhoto(
+    page: Page,
+    opts?: { tokenLifetime?: number },
+  ): Promise<string | null> {
     const attachmentId = getCoverAttachmentId(page.coverPhoto);
     if (!attachmentId) return page.coverPhoto;
 
@@ -443,6 +571,7 @@ export class ShareService {
       attachmentId,
       pageId: page.id,
       workspaceId: page.workspaceId,
+      ...(opts?.tokenLifetime ? { expiresInSeconds: opts.tokenLifetime } : {}),
     });
     return updateAttachmentUrl(page.coverPhoto, token);
   }
@@ -454,6 +583,7 @@ export class ShareService {
   async sanitizeTransclusionItemsForPublic(
     items: TransclusionLookup[],
     workspaceId: string,
+    tokenLifetimeFor?: (sourcePageId: string) => number | undefined,
   ): Promise<TransclusionLookup[]> {
     const tokenized = await Promise.all(
       items.map(async (item) => {
@@ -462,6 +592,7 @@ export class ShareService {
           item.content,
           item.sourcePageId,
           workspaceId,
+          tokenLifetimeFor?.(item.sourcePageId),
         );
         return { ...item, content: doc.toJSON() };
       }),
@@ -503,6 +634,7 @@ export class ShareService {
     content: unknown,
     attachmentOwnerPageId: string,
     workspaceId: string,
+    tokenLifetime?: number,
   ): Promise<Node> {
     const pmJson = getProsemirrorContent(content);
     const attachmentIds = getAttachmentIds(pmJson);
@@ -514,6 +646,7 @@ export class ShareService {
           attachmentId,
           pageId: attachmentOwnerPageId,
           workspaceId,
+          ...(tokenLifetime ? { expiresInSeconds: tokenLifetime } : {}),
         });
         tokenMap.set(attachmentId, token);
       }),

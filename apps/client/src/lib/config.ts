@@ -51,6 +51,14 @@ export function isBetaBaseForms(): boolean {
   return castToBoolean(getConfigValue("BETA_BASE_FORMS"));
 }
 
+// On unless the server says AGENT_MCP_ENABLED=false.
+export function isAgentMcpEnabled(): boolean {
+  const raw = import.meta.env.DEV
+    ? process?.env?.AGENT_MCP_ENABLED
+    : window?.CONFIG?.AGENT_MCP_ENABLED;
+  return String(raw ?? "true").toLowerCase() !== "false";
+}
+
 export function isUnsplashEnabled(): boolean {
   return castToBoolean(getConfigValue("UNSPLASH_ENABLED"));
 }

@@ -3,8 +3,12 @@ import { WebSocketServer } from 'ws';
 export class CollabWsAdapter {
   private readonly wss: WebSocketServer;
 
-  constructor() {
-    this.wss = new WebSocketServer({ noServer: true });
+  constructor(options: { maxPayload: number }) {
+    // one Yjs update per message; without a cap ws accepts up to 100 MiB
+    this.wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: options.maxPayload,
+    });
   }
 
   handleUpgrade(path: string, httpServer: any) {

@@ -165,6 +165,8 @@ export class ShareRepo {
       .select((eb) => this.withPage(eb))
       .select((eb) => this.withSpace(eb, userId))
       .select((eb) => this.withCreator(eb))
+      .select((eb) => this.withExpiry(eb, 'expiresAt'))
+      .select((eb) => this.withExpiry(eb, 'periodDays'))
       .where('spaceId', 'in', this.spaceMemberRepo.getUserSpaceIdsQuery(userId));
 
     return executeWithCursorPagination(query, {
@@ -180,6 +182,19 @@ export class ShareRepo {
         id: cursor.id,
       }),
     });
+  }
+
+  // A scalar subquery rather than a join: the cursor orders by unqualified
+  // updatedAt and id, which a joined share_expiries row would make ambiguous.
+  withExpiry(
+    eb: ExpressionBuilder<DB, 'shares'>,
+    column: 'expiresAt' | 'periodDays',
+  ) {
+    return eb
+      .selectFrom('shareExpiries')
+      .select(`shareExpiries.${column}`)
+      .whereRef('shareExpiries.shareId', '=', 'shares.id')
+      .as(column);
   }
 
   withPage(eb: ExpressionBuilder<DB, 'shares'>) {

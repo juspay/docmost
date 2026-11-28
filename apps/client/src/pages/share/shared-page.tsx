@@ -14,6 +14,9 @@ import DocsBreadcrumbs from "@/features/public-space/components/docs/docs-breadc
 import DocsPageNav from "@/features/public-space/components/docs/docs-page-nav.tsx";
 import DocsFooterBranding from "@/features/public-space/components/docs/docs-footer-branding.tsx";
 import { PublicPageCover } from "@/features/page-cover/components/public-page-cover.tsx";
+import ShareExpired, {
+  getShareExpired,
+} from "@/features/share/components/share-expired.tsx";
 
 export default function SharedPage() {
   const { t } = useTranslation();
@@ -52,6 +55,15 @@ export default function SharedPage() {
         <Skeleton height={12} width="85%" radius="sm" />
         <Skeleton height={12} width="60%" radius="sm" />
       </Stack>
+    );
+  }
+
+  const expired = isError ? getShareExpired(error) : null;
+  if (expired) {
+    return (
+      <ShareExpired
+        pageSlugId={expired.pageSlugId ?? extractPageSlugId(pageSlug)}
+      />
     );
   }
 

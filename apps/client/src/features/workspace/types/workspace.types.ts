@@ -28,6 +28,7 @@ export interface IWorkspace {
   allowPublicSpaces?: boolean;
   publicSpacesDirectory?: boolean;
   mcpEnabled?: boolean;
+  agentMcpEnabled?: boolean;
   aiChatReadOnly?: boolean;
   aiChatWorkspaceKnowledgeOnly?: boolean;
   enforceMcpOauth?: boolean;
@@ -42,6 +43,7 @@ export interface IWorkspace {
 
 export interface IWorkspaceSettings {
   ai?: IWorkspaceAiSettings;
+  agentMcp?: { enabled?: boolean };
   sharing?: IWorkspaceSharingSettings;
   export?: IWorkspaceExportSettings;
   api?: IWorkspaceApiSettings;

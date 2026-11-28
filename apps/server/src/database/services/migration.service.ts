@@ -19,6 +19,8 @@ export class MigrationService {
         path,
         migrationFolder: path.join(__dirname, '..', 'migrations'),
       }),
+      // this fork adds migrations between upstream's; each only creates a new table
+      allowUnorderedMigrations: true,
     });
 
     const { error, results } = await migrator.migrateToLatest();

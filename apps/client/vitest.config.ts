@@ -10,6 +10,10 @@ export default defineConfig({
         __dirname,
         '../../packages/editor-ext/src/index.ts',
       ),
+      '@docmost/live-blocks': path.resolve(
+        __dirname,
+        '../../packages/live-blocks/src/index.ts',
+      ),
       '@': path.resolve(__dirname, './src'),
     },
   },

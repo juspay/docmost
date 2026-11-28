@@ -684,6 +684,20 @@ export class WorkspaceService {
         );
       }
 
+      if (typeof updateWorkspaceDto.agentMcpEnabled !== 'undefined') {
+        const prev = settingsBefore?.agentMcp?.enabled ?? false;
+        if (prev !== updateWorkspaceDto.agentMcpEnabled) {
+          before.agentMcpEnabled = prev;
+          after.agentMcpEnabled = updateWorkspaceDto.agentMcpEnabled;
+        }
+        await this.workspaceRepo.updateAgentMcpSettings(
+          workspaceId,
+          'enabled',
+          updateWorkspaceDto.agentMcpEnabled,
+          trx,
+        );
+      }
+
       if (typeof updateWorkspaceDto.enforceMcpOauth !== 'undefined') {
         const prev = settingsBefore?.ai?.enforceMcpOauth ?? false;
         if (prev !== updateWorkspaceDto.enforceMcpOauth) {
@@ -755,6 +769,7 @@ export class WorkspaceService {
       delete updateWorkspaceDto.aiChatReadOnly;
       delete updateWorkspaceDto.aiChatWorkspaceKnowledgeOnly;
       delete updateWorkspaceDto.enforceMcpOauth;
+      delete updateWorkspaceDto.agentMcpEnabled;
 
       await this.workspaceRepo.updateWorkspace(
         updateWorkspaceDto,

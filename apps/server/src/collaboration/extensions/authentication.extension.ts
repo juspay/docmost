@@ -20,13 +20,19 @@ import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { findHighestUserSpaceRole } from '@docmost/db/repos/space/utils';
-import { Page, User } from '@docmost/db/types/entity.types';
+import { LiveBlock, Page, User } from '@docmost/db/types/entity.types';
 import { SpaceRole } from '../../common/helpers/types/permission';
 import { isUserDisabled } from '../../common/helpers';
-import { getPageId } from '../collaboration.util';
+import { parseDocumentName } from '@docmost/live-blocks';
+import { LiveBlockCollabService } from '../live-block/live-block-collab.service';
+import { pageContainsBlock } from '../../core/live-block/page-content.util';
+import { TiptapTransformer } from '@hocuspocus/transformer';
 import { COLLAB_ACCESS_RECHECK_CHANNEL } from '../constants';
 import { CollabAccessRecheck } from '../services/collab-access.service';
 import { JwtCollabPayload, JwtType } from '../../core/auth/dto/jwt-payload';
+
+// a block inserted less than this long ago may still be missing from the stored page
+const NEW_BLOCK_GRACE_MS = 2 * 60 * 1000;
 
 type CollabAccess = 'none' | 'read' | 'write';
 
@@ -43,6 +49,7 @@ export class AuthenticationExtension implements Extension {
     private readonly spaceMemberRepo: SpaceMemberRepo,
     private readonly pagePermissionRepo: PagePermissionRepo,
     private readonly redisService: RedisService,
+    private readonly liveBlockCollab: LiveBlockCollabService,
   ) {}
 
   async onConfigure({ instance }: onConfigurePayload) {
@@ -72,7 +79,10 @@ export class AuthenticationExtension implements Extension {
 
   async onAuthenticate(data: onAuthenticatePayload) {
     const { documentName, token } = data;
-    const pageId = getPageId(documentName);
+    const parsed = parseDocumentName(documentName);
+    if (parsed.type === 'invalid') {
+      throw new NotFoundException('Page not found');
+    }
 
     let jwtPayload: JwtCollabPayload;
 
@@ -85,9 +95,23 @@ export class AuthenticationExtension implements Extension {
     const userId = jwtPayload.sub;
     const workspaceId = jwtPayload.workspaceId;
 
+    let pageId = parsed.id;
+    let block: LiveBlock | null = null;
+    if (parsed.type === 'block') {
+      block = await this.liveBlockCollab.resolve(parsed.id, workspaceId);
+      if (!block) {
+        this.logger.debug(`Live block not found: ${parsed.id}`);
+        throw new NotFoundException('Page not found');
+      }
+      pageId = block.pageId;
+    }
+
     const [user, page] = await Promise.all([
       this.userRepo.findById(userId, workspaceId),
-      this.pageRepo.findById(pageId),
+      // a block's page content says whether the block is still in it
+      parsed.type === 'block'
+        ? this.pageRepo.findById(pageId, { includeContent: true })
+        : this.pageRepo.findById(pageId),
     ]);
 
     if (!user || isUserDisabled(user)) {
@@ -99,10 +123,19 @@ export class AuthenticationExtension implements Extension {
       throw new NotFoundException('Page not found');
     }
 
+    // a block removed from its page cannot be opened or written live, even
+    // with its id; a reader of its page can still copy it (clone, R53)
+    if (block && !this.pageHoldsBlock(page, block)) {
+      this.logger.debug(`Live block ${parsed.id} is not in page ${pageId}`);
+      throw new NotFoundException('Page not found');
+    }
+
     const access = await this.getAccess(user, page);
 
     if (access === 'none') {
-      this.logger.warn(`User ${user.id} not authorized to access page: ${pageId}`);
+      this.logger.warn(
+        `User ${user.id} not authorized to access page: ${pageId}`,
+      );
       throw new UnauthorizedException();
     }
 
@@ -115,6 +148,29 @@ export class AuthenticationExtension implements Extension {
     return {
       user,
     };
+  }
+
+  /**
+   * The page's stored content, or its live document when it is open here, or
+   * a row this page created moments ago: with Redis the page may be open on
+   * another server, and its store comes 10 to 45 s after the insert.
+   */
+  private pageHoldsBlock(page: Page, block: LiveBlock): boolean {
+    const blockId = block.id;
+    if (pageContainsBlock(page.content, blockId)) return true;
+    if (block.createdAt) {
+      // a creation time ahead of this clock gets no grace
+      const age = Date.now() - new Date(block.createdAt).getTime();
+      if (age >= 0 && age < NEW_BLOCK_GRACE_MS) return true;
+    }
+    const open = this.instance?.documents.get(`page.${page.id}`);
+    if (!open) return false;
+    try {
+      const json = TiptapTransformer.fromYdoc(open, 'default');
+      return pageContainsBlock(json, blockId);
+    } catch {
+      return false;
+    }
   }
 
   async recheckAccess({
@@ -133,7 +189,13 @@ export class AuthenticationExtension implements Extension {
     }
 
     for (const document of this.instance.documents.values()) {
-      const pageId = getPageId(document.name);
+      const parsed = parseDocumentName(document.name);
+      if (parsed.type === 'invalid') continue;
+      // a block connection is rechecked whenever its page is
+      const pageId =
+        parsed.type === 'block'
+          ? this.liveBlockCollab.pageIdOf(document.name)
+          : parsed.id;
       const connections = document.getConnections().filter((connection) => {
         const userId = connection.context?.user?.id;
         return (

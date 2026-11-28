@@ -19,6 +19,7 @@ import LightboxView, {
 import { MicrosoftFullscreenModal } from "@/features/editor/components/microsoft/microsoft-fullscreen-modal.tsx";
 import { publicImageLink } from "./components/image/public-image-link";
 import { useImageLinkNavigation } from "./components/image/use-image-link-navigation";
+import { LiveBlockHostProvider } from "@/features/live-block/live-block-host";
 
 interface PageEditorProps {
   title: string;
@@ -109,6 +110,15 @@ export default function ReadonlyPageEditor({
   ];
 
   return (
+    <LiveBlockHostProvider
+      host={
+        pageId && shareId
+          ? { mode: "share", pageId, shareId }
+          : pageId && !spaceSlug
+            ? { mode: "page", pageId }
+            : { mode: "none" }
+      }
+    >
     <TransclusionLookupProvider shareId={shareId} spaceSlug={spaceSlug}>
       <div className="page-title">
         <EditorProvider
@@ -166,5 +176,6 @@ export default function ReadonlyPageEditor({
       <MicrosoftFullscreenModal />
       {trailingSpace && <div style={{ paddingBottom: "20vh" }}></div>}
     </TransclusionLookupProvider>
+    </LiveBlockHostProvider>
   );
 }

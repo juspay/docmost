@@ -18,6 +18,9 @@ import { TransclusionModule } from '../core/page/transclusion/transclusion.modul
 import { PageVerificationInvalidationModule } from '../core/page/verification/page-verification-invalidation.module';
 import { StorageModule } from '../integrations/storage/storage.module';
 import { EnvironmentModule } from '../integrations/environment/environment.module';
+import { LiveBlockCollabService } from './live-block/live-block-collab.service';
+import { LiveBlockSyncBridge } from './live-block/live-block-sync.bridge';
+import { EnvironmentService } from '../integrations/environment/environment.service';
 
 @Module({
   providers: [
@@ -30,8 +33,14 @@ import { EnvironmentModule } from '../integrations/environment/environment.modul
     PageHistoryRecorderService,
     CollaborationHandler,
     TransclusionService,
+    LiveBlockCollabService,
+    LiveBlockSyncBridge,
   ],
-  exports: [CollaborationGateway, PageHistoryRecorderService],
+  exports: [
+    CollaborationGateway,
+    PageHistoryRecorderService,
+    LiveBlockSyncBridge,
+  ],
   imports: [
     TokenModule,
     WatcherModule,
@@ -50,10 +59,13 @@ export class CollaborationModule implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly collaborationGateway: CollaborationGateway,
     private readonly httpAdapterHost: HttpAdapterHost,
+    private readonly environmentService: EnvironmentService,
   ) {}
 
   onModuleInit() {
-    this.collabWsAdapter = new CollabWsAdapter();
+    this.collabWsAdapter = new CollabWsAdapter({
+      maxPayload: this.environmentService.getCollabMessageSizeLimit(),
+    });
     const httpServer = this.httpAdapterHost.httpAdapter.getHttpServer();
 
     const wss = this.collabWsAdapter.handleUpgrade(this.path, httpServer);

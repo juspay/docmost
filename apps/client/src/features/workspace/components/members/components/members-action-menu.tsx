@@ -1,22 +1,30 @@
-import { Menu, ActionIcon } from "@mantine/core";
+import { Menu, ActionIcon, Text } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import React from "react";
-import { IconDots, IconTrash, IconUserOff, IconUserCheck } from "@tabler/icons-react";
+import { IconDots, IconTrash, IconUserOff, IconUserCheck, IconFingerprint } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import useUserRole from "@/hooks/use-user-role.tsx";
+import { UserRole } from "@/lib/types.ts";
+import { isCloud } from "@/lib/config.ts";
+import { useAdminDeletePasskeysMutation } from "@/features/passkey/queries/passkey-query.ts";
 import { useMemberActions } from "@/features/workspace/hooks/use-member-actions.tsx";
 
 interface Props {
   userId: string;
   name: string;
   deactivatedAt: Date | null;
+  role?: string;
 }
 export default function MemberActionMenu({
   userId,
   name,
   deactivatedAt,
+  role,
 }: Props) {
   const { t } = useTranslation();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isOwner } = useUserRole();
+  // the server refuses an admin acting on an owner
+  const canRemovePasskeys = !isCloud() && (isOwner || role !== UserRole.OWNER);
 
   const isDeactivated = !!deactivatedAt;
 
@@ -24,6 +32,24 @@ export default function MemberActionMenu({
     userId,
     isDeactivated,
   });
+
+  const removePasskeysMutation = useAdminDeletePasskeysMutation();
+  const openRemovePasskeysModal = () =>
+    modals.openConfirmModal({
+      title: t("Remove passkeys"),
+      children: (
+        <Text size="sm">
+          {t(
+            "Remove all passkeys of {{name}}? They will need their password to sign in.",
+            { name },
+          )}
+        </Text>
+      ),
+      centered: true,
+      labels: { confirm: t("Remove"), cancel: t("Cancel") },
+      confirmProps: { color: "red" },
+      onConfirm: () => removePasskeysMutation.mutate(userId),
+    });
 
   return (
     <>
@@ -59,6 +85,16 @@ export default function MemberActionMenu({
           >
             {isDeactivated ? t("Activate member") : t("Deactivate member")}
           </Menu.Item>
+
+          {canRemovePasskeys && (
+            <Menu.Item
+              onClick={openRemovePasskeysModal}
+              leftSection={<IconFingerprint size={16} />}
+              disabled={!isAdmin}
+            >
+              {t("Remove passkeys")}
+            </Menu.Item>
+          )}
 
           <Menu.Divider />
 

@@ -3,13 +3,20 @@ import { useMemo } from "react";
 import { mainExtensions } from "@/features/editor/extensions/extensions";
 import { UniqueID } from "@docmost/editor-ext";
 import { useImageLinkNavigation } from "../image/use-image-link-navigation";
+import {
+  LiveBlockHostProvider,
+  nestedHostFor,
+  useLiveBlockHost,
+} from "@/features/live-block/live-block-host";
 
 type Props = {
   content: unknown;
+  sourcePageId: string | null;
 };
 
-export default function TransclusionContent({ content }: Props) {
+export default function TransclusionContent({ content, sourcePageId }: Props) {
   const handleImageLink = useImageLinkNavigation();
+  const host = nestedHostFor(useLiveBlockHost(), sourcePageId);
   const extensions = useMemo(() => {
     const filtered = mainExtensions.filter(
       (e: any) => e.name !== "uniqueID" && e.name !== "globalDragHandle",
@@ -39,14 +46,16 @@ export default function TransclusionContent({ content }: Props) {
       onDragOver={stop}
       onDrop={stop}
     >
-      <EditorProvider
-        editable={false}
-        immediatelyRender={true}
-        textDirection="auto"
-        extensions={extensions}
-        editorContainerProps={{ onClick: handleImageLink }}
-        content={content as any}
-      />
+      <LiveBlockHostProvider host={host}>
+        <EditorProvider
+          editable={false}
+          immediatelyRender={true}
+          textDirection="auto"
+          extensions={extensions}
+          editorContainerProps={{ onClick: handleImageLink }}
+          content={content as any}
+        />
+      </LiveBlockHostProvider>
     </div>
   );
 }

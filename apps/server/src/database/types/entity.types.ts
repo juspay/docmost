@@ -35,11 +35,14 @@ import {
   AuthProviders,
   AuthAccounts,
   Shares,
+  ShareExpiries,
   PublicSpaces,
   Favorites,
   FileTasks,
   UserMfa as _UserMFA,
   UserSessions,
+  UserPasskeys,
+  PersonalAccessTokens,
   ApiKeys,
   ScimTokens,
   SiemDestinations,
@@ -50,6 +53,7 @@ import {
   OauthAuthorizationCodes,
   OauthGrants,
   OauthTokens,
+  LiveBlocks,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -151,6 +155,10 @@ export type UpdatableAuthProvider = Updateable<Omit<AuthProviders, 'id'>>;
 export type AuthAccount = Selectable<AuthAccounts>;
 export type InsertableAuthAccount = Insertable<AuthAccounts>;
 export type UpdatableAuthAccount = Updateable<Omit<AuthAccounts, 'id'>>;
+
+// Share expiry
+export type ShareExpiryRow = Selectable<ShareExpiries>;
+export type InsertableShareExpiry = Insertable<ShareExpiries>;
 
 // Share
 export type Share = Selectable<Shares>;
@@ -306,3 +314,20 @@ export type UpdatableSiemDestination = Updateable<Omit<SiemDestinations, 'id'>>;
 export type Announcement = Selectable<Announcements>;
 export type InsertableAnnouncement = Insertable<Announcements>;
 export type UpdatableAnnouncement = Updateable<Omit<Announcements, 'id'>>;
+
+// UserPasskey
+export type UserPasskey = Selectable<UserPasskeys>;
+export type InsertableUserPasskey = Insertable<UserPasskeys>;
+export type UpdatableUserPasskey = Updateable<Omit<UserPasskeys, 'id'>>;
+
+// PersonalAccessToken
+export type PersonalAccessToken = Selectable<PersonalAccessTokens>;
+export type InsertablePersonalAccessToken = Insertable<PersonalAccessTokens>;
+export type UpdatablePersonalAccessToken = Updateable<
+  Omit<PersonalAccessTokens, 'id'>
+>;
+
+// Live Block
+export type LiveBlock = Selectable<LiveBlocks>;
+export type InsertableLiveBlock = Insertable<LiveBlocks>;
+export type UpdatableLiveBlock = Updateable<Omit<LiveBlocks, 'id'>>;

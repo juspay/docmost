@@ -25,6 +25,7 @@ export * from "./lib/subpages";
 export * from "./lib/recently-updated";
 export * from "./lib/items-by-label";
 export * from "./lib/transclusion";
+export * from "./lib/live-block";
 export * from "./lib/highlight";
 export * from "./lib/text-color";
 export * from "./lib/indent";

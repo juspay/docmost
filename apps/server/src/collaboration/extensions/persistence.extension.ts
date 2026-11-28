@@ -12,7 +12,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TiptapTransformer } from '@hocuspocus/transformer';
 import type { JSONContent } from '@tiptap/core';
 import {
-  getPageId,
   isRenderableObject,
   jsonToText,
   tiptapExtensions,
@@ -41,6 +40,8 @@ import { PageVerificationInvalidationService } from '../../core/page/verificatio
 import { PageVerificationInvalidation } from '../../core/page/verification/page-verification-invalidation.types';
 import { isSameDocumentContent } from '../content-comparison.util';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
+import { parseDocumentName } from '@docmost/live-blocks';
+import { LiveBlockCollabService } from '../live-block/live-block-collab.service';
 
 @Injectable()
 export class PersistenceExtension implements Extension {
@@ -61,11 +62,17 @@ export class PersistenceExtension implements Extension {
     private readonly transclusionService: TransclusionService,
     private readonly pageVerificationInvalidationService: PageVerificationInvalidationService,
     private readonly environmentService: EnvironmentService,
+    private readonly liveBlockCollab: LiveBlockCollabService,
   ) {}
 
   async onLoadDocument(data: onLoadDocumentPayload) {
     const { documentName, document } = data;
-    const pageId = getPageId(documentName);
+    const parsed = parseDocumentName(documentName);
+    if (parsed.type === 'invalid') return;
+    if (parsed.type === 'block') {
+      return this.liveBlockCollab.load(parsed.id);
+    }
+    const pageId = parsed.id;
 
     if (!document.isEmpty('default')) {
       return;
@@ -116,9 +123,21 @@ export class PersistenceExtension implements Extension {
   }
 
   async onStoreDocument(data: onStoreDocumentPayload) {
-    const { documentName, document, instance } = data;
+    const { documentName, document } = data;
 
-    const pageId = getPageId(documentName);
+    const parsed = parseDocumentName(documentName);
+    if (parsed.type === 'invalid') return;
+    if (parsed.type === 'block') {
+      try {
+        await this.liveBlockCollab.store(parsed.id, document);
+      } catch (err) {
+        this.logger.error(`Failed to store live block ${parsed.id}`, err);
+        this.keepPending(data);
+        throw err;
+      }
+      return;
+    }
+    const pageId = parsed.id;
     const lastChange = this.lastChanges.get(documentName);
     // A queued retry can have an older context than the document it now snapshots.
     const lastContext = lastChange?.context ?? data.lastContext;
@@ -218,14 +237,7 @@ export class PersistenceExtension implements Extension {
       editingUserIds.forEach((userId) =>
         this.trackContributor(documentName, userId),
       );
-      // A rejected store has no timer left. Keep the live document pending so
-      // disconnect and shutdown can flush it, preserving any newer editor's save.
-      if (
-        instance.documents.get(documentName) === document &&
-        !instance.debouncer.isDebounced(`onStoreDocument-${documentName}`)
-      ) {
-        void instance.storeDocumentHooks(document, data);
-      }
+      this.keepPending(data);
       throw err;
     }
 
@@ -299,6 +311,18 @@ export class PersistenceExtension implements Extension {
     }
   }
 
+  // A rejected store has no timer left. Keep the live document pending so
+  // disconnect and shutdown can flush it, preserving any newer editor's save.
+  private keepPending(data: onStoreDocumentPayload) {
+    const { documentName, document, instance } = data;
+    if (
+      instance.documents.get(documentName) === document &&
+      !instance.debouncer.isDebounced(`onStoreDocument-${documentName}`)
+    ) {
+      void instance.storeDocumentHooks(document, data);
+    }
+  }
+
   // Drop malformed awareness before it is broadcast
   async beforeHandleAwareness({
     states,
@@ -332,6 +356,8 @@ export class PersistenceExtension implements Extension {
   }
 
   async onChange(data: onChangePayload) {
+    // blocks have no contributors or page history
+    if (parseDocumentName(data.documentName).type !== 'page') return;
     this.lastChanges.set(data.documentName, {
       at: new Date(),
       context: data.context,
@@ -351,6 +377,9 @@ export class PersistenceExtension implements Extension {
 
   async afterUnloadDocument(data: afterUnloadDocumentPayload) {
     const documentName = data.documentName;
+    if (parseDocumentName(documentName).type === 'block') {
+      this.liveBlockCollab.forget(documentName);
+    }
     this.contributors.delete(documentName);
     this.lastChanges.delete(documentName);
   }

@@ -27,15 +27,19 @@ import { KyselyDB } from '@docmost/db/types/kysely.types';
 import * as process from 'node:process';
 import { MigrationService } from '@docmost/db/services/migration.service';
 import { UserTokenRepo } from './repos/user-token/user-token.repo';
+import { AccessTokenRepo } from '@docmost/db/repos/access-token/access-token.repo';
 import { UserSessionRepo } from '@docmost/db/repos/session/user-session.repo';
+import { UserPasskeyRepo } from './repos/passkey/user-passkey.repo';
 import { BacklinkRepo } from '@docmost/db/repos/backlink/backlink.repo';
 import { ShareRepo } from '@docmost/db/repos/share/share.repo';
+import { ShareExpiryRepo } from '@docmost/db/repos/share/share-expiry.repo';
 import { PublicSpaceRepo } from '@docmost/db/repos/public-space/public-space.repo';
 import { NotificationRepo } from '@docmost/db/repos/notification/notification.repo';
 import { WatcherRepo } from '@docmost/db/repos/watcher/watcher.repo';
 import { LabelRepo } from '@docmost/db/repos/label/label.repo';
 import { FavoriteRepo } from '@docmost/db/repos/favorite/favorite.repo';
 import { TemplateRepo } from '@docmost/db/repos/template/template.repo';
+import { LiveBlockRepo } from '@docmost/db/repos/live-block/live-block.repo';
 import { PageListener } from '@docmost/db/listeners/page.listener';
 import { PostgresJSDialect } from 'kysely-postgres-js';
 import * as postgres from 'postgres';
@@ -97,13 +101,17 @@ import { DatabaseModuleOptions } from './database.types';
     AttachmentRepo,
     UserTokenRepo,
     UserSessionRepo,
+    UserPasskeyRepo,
     BacklinkRepo,
     ShareRepo,
+    ShareExpiryRepo,
     PublicSpaceRepo,
     NotificationRepo,
     WatcherRepo,
     LabelRepo,
     TemplateRepo,
+    AccessTokenRepo,
+    LiveBlockRepo,
     PageListener,
   ],
   exports: [
@@ -123,13 +131,17 @@ import { DatabaseModuleOptions } from './database.types';
     AttachmentRepo,
     UserTokenRepo,
     UserSessionRepo,
+    UserPasskeyRepo,
     BacklinkRepo,
     ShareRepo,
+    ShareExpiryRepo,
     PublicSpaceRepo,
     NotificationRepo,
     WatcherRepo,
     LabelRepo,
     TemplateRepo,
+    AccessTokenRepo,
+    LiveBlockRepo,
   ],
 })
 export class DatabaseModule implements OnApplicationBootstrap {

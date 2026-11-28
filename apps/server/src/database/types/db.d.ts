@@ -392,6 +392,16 @@ export interface PublicSpaces {
   workspaceId: string;
 }
 
+export interface ShareExpiries {
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  periodDays: number;
+  shareId: string;
+  updatedAt: Generated<Timestamp>;
+  updatedById: string | null;
+  workspaceId: string;
+}
+
 export interface Shares {
   createdAt: Generated<Timestamp>;
   creatorId: string | null;
@@ -547,6 +557,30 @@ export interface Workspaces {
   stripeCustomerId: string | null;
   trialEndAt: Timestamp | null;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface MindspaceImportMap {
+  createdAt: Generated<Timestamp>;
+  sourceId: string;
+  sourceType: string;
+  targetId: string;
+  targetType: string;
+  verifiedAt: Timestamp | null;
+  workspaceId: string;
+}
+
+export interface LiveBlocks {
+  createdAt: Generated<Timestamp>;
+  creatorId: string | null;
+  deletedAt: Timestamp | null;
+  id: string;
+  kind: string;
+  pageId: string;
+  snapshot: Json | null;
+  snapshotError: string | null;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+  ydoc: Buffer | null;
 }
 
 export interface Notifications {
@@ -739,6 +773,35 @@ export interface AiChatMessages {
   deletedAt: Timestamp | null;
 }
 
+export interface UserPasskeys {
+  backedUp: Generated<boolean>;
+  counter: Generated<Int8>;
+  createdAt: Generated<Timestamp>;
+  credentialId: string;
+  deviceType: string;
+  id: Generated<string>;
+  lastUsedAt: Timestamp | null;
+  name: string;
+  publicKey: Buffer;
+  transports: Generated<string[]>;
+  userId: string;
+  workspaceId: string;
+}
+
+export interface PersonalAccessTokens {
+  id: Generated<string>;
+  userId: string;
+  workspaceId: string;
+  name: string;
+  tokenHash: string;
+  tokenPrefix: string;
+  scope: string;
+  expiresAt: Timestamp | null;
+  lastUsedAt: Timestamp | null;
+  revokedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+}
+
 export interface UserSessions {
   id: Generated<string>;
   userId: string;
@@ -835,6 +898,8 @@ export interface DB {
   integrationConnections: IntegrationConnections;
   integrations: Integrations;
   labels: Labels;
+  liveBlocks: LiveBlocks;
+  mindspaceImportMap: MindspaceImportMap;
   notifications: Notifications;
   pageAccess: PageAccess;
   pageTransclusionReferences: PageTransclusionReferences;
@@ -845,8 +910,10 @@ export interface DB {
   pageVerifications: PageVerifications;
   pageVerifiers: PageVerifiers;
   pages: Pages;
+  personalAccessTokens: PersonalAccessTokens;
   publicSpaces: PublicSpaces;
   scimTokens: ScimTokens;
+  shareExpiries: ShareExpiries;
   shares: Shares;
   siemDestinations: SiemDestinations;
   spaceMembers: SpaceMembers;
@@ -854,6 +921,7 @@ export interface DB {
   templates: Templates;
   userMfa: UserMfa;
   users: Users;
+  userPasskeys: UserPasskeys;
   userSessions: UserSessions;
   userTokens: UserTokens;
   watchers: Watchers;

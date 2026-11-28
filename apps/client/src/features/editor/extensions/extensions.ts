@@ -43,6 +43,10 @@ import {
   CustomCodeBlock,
   Drawio,
   Excalidraw,
+  Whiteboard,
+  TodoBoard,
+  Sheet,
+  LiveBlockIdentity,
   Embed,
   TiptapPdf,
   PageBreak,
@@ -109,6 +113,10 @@ import AttachmentView from "@/features/editor/components/attachment/attachment-v
 import CodeBlockView from "@/features/editor/components/code-block/code-block-view.tsx";
 import DrawioView from "../components/drawio/drawio-view";
 import ExcalidrawView from "@/features/editor/components/excalidraw/excalidraw-view-lazy.tsx";
+import WhiteboardView from "@/features/live-block/whiteboard/whiteboard-view-lazy.tsx";
+import TodoView from "@/features/live-block/todo/todo-view-lazy.tsx";
+import SheetView from "@/features/live-block/sheet/sheet-view-lazy.tsx";
+import { v7 as uuid7 } from "uuid";
 import EmbedView from "@/features/editor/components/embed/embed-view.tsx";
 import PdfView from "@/features/editor/components/pdf/pdf-view.tsx";
 import SubpagesView from "@/features/editor/components/subpages/subpages-view.tsx";
@@ -411,6 +419,10 @@ export const mainExtensions = [
       className: buildResizeClasses("node-excalidraw"),
     },
   }),
+  Whiteboard.configure({ view: WhiteboardView, newId: uuid7 }),
+  TodoBoard.configure({ view: TodoView, newId: uuid7 }),
+  Sheet.configure({ view: SheetView, newId: uuid7 }),
+  LiveBlockIdentity.configure({ newId: uuid7 }),
   Embed.configure({
     view: EmbedView,
   }),

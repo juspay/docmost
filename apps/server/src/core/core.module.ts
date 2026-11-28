@@ -18,6 +18,7 @@ import { PageAccessModule } from './page/page-access/page-access.module';
 import { DomainMiddleware } from '../common/middlewares/domain.middleware';
 import { AuditContextMiddleware } from '../common/middlewares/audit-context.middleware';
 import { ShareModule } from './share/share.module';
+import { ShareExpiryModule } from './share-expiry/share-expiry.module';
 import { PublicSpaceModule } from './public-space/public-space.module';
 import { LabelModule } from './label/label.module';
 import { NotificationModule } from './notification/notification.module';
@@ -28,7 +29,11 @@ import { FigmaModule } from './integration/providers/figma/figma.module';
 import { LinearModule } from './integration/providers/linear/linear.module';
 import { FavoriteModule } from './favorite/favorite.module';
 import { SessionModule } from './session/session.module';
+import { PasskeyModule } from './passkey/passkey.module';
+import { AccessTokenModule } from './access-token/access-token.module';
+import { AgentMcpModule } from './agent-mcp/agent-mcp.module';
 import { ClsMiddleware } from 'nestjs-cls';
+import { LiveBlockModule } from './live-block/live-block.module';
 
 @Module({
   imports: [
@@ -45,6 +50,7 @@ import { ClsMiddleware } from 'nestjs-cls';
     CaslModule,
     PageAccessModule,
     ShareModule,
+    ShareExpiryModule,
     PublicSpaceModule,
     LabelModule,
     NotificationModule,
@@ -54,6 +60,10 @@ import { ClsMiddleware } from 'nestjs-cls';
     FigmaModule,
     LinearModule,
     SessionModule,
+    PasskeyModule,
+    AccessTokenModule,
+    AgentMcpModule,
+    LiveBlockModule,
   ],
 })
 export class CoreModule implements NestModule {
