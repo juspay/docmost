@@ -57,6 +57,11 @@ export class UpdateWorkspaceDto extends PartialType(CreateWorkspaceDto) {
   @IsBoolean()
   mcpEnabled: boolean;
 
+  // the agent endpoint (/api/agent-mcp) with personal access tokens; not licensed
+  @IsOptional()
+  @IsBoolean()
+  agentMcpEnabled: boolean;
+
   @IsOptional()
   @IsBoolean()
   isScimEnabled: boolean;

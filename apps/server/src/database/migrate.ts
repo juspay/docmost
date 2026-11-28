@@ -24,6 +24,8 @@ const migrator = new Migrator({
     path,
     migrationFolder,
   }),
+  // this fork adds migrations between upstream's; each only creates a new table
+  allowUnorderedMigrations: true,
 });
 
 run(db, migrator, migrationFolder);

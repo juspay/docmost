@@ -24,6 +24,10 @@ import { DOMSerializer, Node } from "@tiptap/pm/model";
 import { ChangeSet, simplifyChanges } from "@tiptap/pm/changeset";
 import { useAtom } from "jotai";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
+import { LiveBlockHostProvider } from "@/features/live-block/live-block-host";
+import { usePageQuery } from "@/features/page/queries/page-query";
+import { extractPageSlugId } from "@/lib";
 import {
   diffCountsAtom,
   highlightChangesAtom,
@@ -51,6 +55,12 @@ export function HistoryEditor({
     !!previousContent &&
     previousTitle !== undefined &&
     normalizeHistoryTitle(previousTitle) !== normalizeHistoryTitle(title);
+
+  // the page being previewed is the one open in the page view
+  const { pageSlug } = useParams();
+  const { data: currentPage } = usePageQuery({
+    pageId: extractPageSlugId(pageSlug),
+  });
 
   const editor = useEditor({
     extensions: mainExtensions,
@@ -324,7 +334,15 @@ export function HistoryEditor({
         )}
       </Title>
       {editor && (
-        <EditorContent editor={editor} />
+        <LiveBlockHostProvider
+          host={
+            currentPage?.id
+              ? { mode: "history", pageId: currentPage.id }
+              : { mode: "none" }
+          }
+        >
+          <EditorContent editor={editor} />
+        </LiveBlockHostProvider>
       )}
     </div>
   );

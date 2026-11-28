@@ -84,6 +84,7 @@ import { jwtDecode } from "jwt-decode";
 import { searchSpotlight } from "@/features/search/constants.ts";
 import { useEditorScroll } from "./hooks/use-editor-scroll";
 import { usePageYdoc } from "./hooks/use-page-ydoc";
+import { dropBlocksOfRefusedPage } from "@/features/live-block/components/page-refusal";
 import { useDestroyEditorBeforeChildren } from "./hooks/use-destroy-editor-before-children";
 import { EditorAiMenu } from "@/ee/ai/components/editor/ai-menu/ai-menu";
 import { usePageEditMode, usePageSyncPermission } from "@/ee/page-verification/hooks/use-page-edit-mode";
@@ -98,6 +99,7 @@ import { MicrosoftFullscreenModal } from "@/features/editor/components/microsoft
 import { getInstalledIntegrations } from "@/features/integration/services/integration-service";
 import { TransclusionLookupProvider } from "@/features/editor/components/transclusion/transclusion-lookup-context";
 import { useTranslation } from "react-i18next";
+import { LiveBlockHostProvider } from "@/features/live-block/live-block-host";
 import {
   acquireCollabSocket,
   getCollabSocket,
@@ -174,7 +176,10 @@ export default function PageEditor({
           error: Object.assign(new Error("Forbidden"), { status: 403 }),
         });
     }
-    if (access === "none") localDoc?.discardRejectedChanges(true);
+    if (access === "none") {
+      localDoc?.discardRejectedChanges(true);
+      void dropBlocksOfRefusedPage(pageId, user?.id);
+    }
   };
 
   const handleStateless = ({ payload }: onStatelessParameters) => {
@@ -210,12 +215,16 @@ export default function PageEditor({
       setRoomDeniedWrite(true);
       void queryClient.invalidateQueries({ queryKey: ["pages", slugId], exact: true }).then(() => {
         const error = queryClient.getQueryState<IPage, { status?: number }>(["pages", slugId])?.error;
-        if (error?.status === 403 || error?.status === 404) localDoc?.discardRejectedChanges(true);
+        if (error?.status === 403 || error?.status === 404) {
+          localDoc?.discardRejectedChanges(true);
+          void dropBlocksOfRefusedPage(pageId, user?.id);
+        }
       });
     }
   };
 
   return (
+    <LiveBlockHostProvider host={{ mode: "page", pageId }}>
     <TransclusionLookupProvider>
       {showStatic && (
         <StaticPageEditor content={content} ariaLabel={t("Page content")} />
@@ -288,6 +297,7 @@ export default function PageEditor({
         </HocuspocusProviderWebsocketComponent>
       )}
     </TransclusionLookupProvider>
+    </LiveBlockHostProvider>
   );
 }
 

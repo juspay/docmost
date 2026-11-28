@@ -35,6 +35,7 @@ export default function ShareList() {
               <Table.Th>{t("Page")}</Table.Th>
               <Table.Th>{t("Shared by")}</Table.Th>
               <Table.Th>{t("Shared at")}</Table.Th>
+              <Table.Th>{t("Expires")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
 
@@ -88,6 +89,24 @@ export default function ShareList() {
                       "PP",
                       locale,
                     )}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Text
+                    fz="sm"
+                    c={share.expired ? "red" : undefined}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {share.expired
+                      ? t("Expired")
+                      : share.expiresAt
+                        ? formatLocalized(
+                            share.expiresAt,
+                            "MMM dd, yyyy",
+                            "PP",
+                            locale,
+                          )
+                        : t("Never")}
                   </Text>
                 </Table.Td>
                 <Table.Td>

@@ -211,7 +211,10 @@ function TransclusionReferenceBody({
       ) : !result ? (
         <div style={{ minHeight: 24 }} />
       ) : !("status" in result) ? (
-        <TransclusionContent content={result.content} />
+        <TransclusionContent
+          content={result.content}
+          sourcePageId={sourcePageId}
+        />
       ) : result.status === "no_access" ? (
         <NoAccessPlaceholder />
       ) : (

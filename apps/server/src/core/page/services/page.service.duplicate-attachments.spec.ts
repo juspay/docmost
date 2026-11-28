@@ -127,15 +127,31 @@ function makeService(pageContent: any = content, extraRows: any[] = []) {
     {} as any,
     {} as any,
     {} as any,
+    {
+      planPageCopies: async () => ({ blockIdMap: new Map(), sources: [] }),
+      insertPageCopies: async () => undefined,
+      removeCopiedFiles: jest.fn(async () => undefined),
+    } as any,
   );
   jest
     .spyOn(service as any, 'filterAccessibleTreePages')
     .mockResolvedValue([page]);
 
-  return { service, page, inserted, storageService };
+  return { service, page, inserted, storageService, labelRepo };
 }
 
 describe('PageService.duplicatePage attachments', () => {
+  it('removes the files its live block copies made when the page transaction fails', async () => {
+    const { service, page, labelRepo } = makeService();
+    labelRepo.copyLabelsToPages.mockRejectedValueOnce(new Error('db down'));
+    await expect(service.duplicatePage(page, undefined, user)).rejects.toThrow(
+      'db down',
+    );
+    expect(
+      (service as any).liveBlockService.removeCopiedFiles,
+    ).toHaveBeenCalled();
+  });
+
   it('points file and image nodes at the copied attachments', async () => {
     const { service, page, inserted } = makeService();
 

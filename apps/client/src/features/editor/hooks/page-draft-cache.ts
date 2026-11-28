@@ -15,7 +15,8 @@ const DRAFT = "draft";
 const WAIT_FOR_WRITE = "draft-requires-write";
 const EMPTY = "empty-page-synced";
 const RECOVERY = "refused-copy";
-const RESTORE = Symbol("restore page");
+/** The origin of updates the cache applies from disk (not edits). */
+export const RESTORE = Symbol("restore page");
 type DraftKey = [string, string, number];
 type Draft = { key: DraftKey; update: Uint8Array; backedUp?: boolean };
 
@@ -130,6 +131,7 @@ export class PageDraftCache {
     userId: string,
     private onWriteError: () => void,
     private canReplayDrafts: () => boolean = () => true,
+    private onDraftStored?: () => void,
   ) {
     this.name = `page.${pageId}.user.${userId}`;
     try {
@@ -341,6 +343,7 @@ export class PageDraftCache {
     })
       .then(() => {
         for (const previous of retry) this.clearBackup(previous);
+        this.onDraftStored?.();
       })
       .catch(() => {
         if (this.refused) return;
@@ -468,10 +471,12 @@ export class PageDraftCache {
     }
   }
 
-  async discard(forgetPage = false): Promise<void> {
+  // dropAllDrafts: every writer's drafts go, not only this tab's (live blocks
+  // refused for good must never replay later). Pages leave it off.
+  async discard(forgetPage = false, dropAllDrafts = false): Promise<void> {
     // Keep the rejected writer's local copy outside the updates that can sync.
     const copy =
-      !forgetPage && this.hasPending
+      !forgetPage && !dropAllDrafts && this.hasPending
         ? {
             id: this.ydoc.guid,
             createdAt: Date.now(),
@@ -493,7 +498,14 @@ export class PageDraftCache {
       await write(this.db, ["updates", "custom"], (tx) => {
         const custom = tx.objectStore("custom");
         if (copy) custom.put(copy, [RECOVERY, copy.id]);
+        if (dropAllDrafts) {
+          custom.delete(IDBKeyRange.bound([DRAFT], [DRAFT, []]));
+          custom.delete(
+            IDBKeyRange.bound([WAIT_FOR_WRITE], [WAIT_FOR_WRITE, []]),
+          );
+        }
         for (const { key } of this.pending.values()) {
+          if (dropAllDrafts) continue;
           // Even a closed tab may have unsent work. This room may discard only
           // its own edits. An inherited draft can be retried by an authorized writer.
           if (key[1] === this.ydoc.guid) tx.objectStore("custom").delete(key);
@@ -511,7 +523,13 @@ export class PageDraftCache {
         }
       });
     for (const draft of this.pending.values()) {
-      if (draft.key[1] === this.ydoc.guid) this.clearBackup(draft);
+      if (dropAllDrafts || draft.key[1] === this.ydoc.guid)
+        this.clearBackup(draft);
+    }
+    if (dropAllDrafts) {
+      for (const key of failedPageWrites.read(this.name).keys())
+        failedPageWrites.remove(this.name, key);
+      this.pending.clear();
     }
     if (this.db) {
       if (copyKey) failedPageWrites.remove(recovery, copyKey);

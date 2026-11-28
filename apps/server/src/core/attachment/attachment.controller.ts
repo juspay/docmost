@@ -317,6 +317,21 @@ export class AttachmentController {
     }
 
     try {
+      // A file from a link that expires is never cached publicly, and only
+      // until its token runs out.
+      if (jwtPayload.expiring) {
+        const remaining = Math.max(
+          0,
+          Math.min(3600, jwtPayload.exp - Math.floor(Date.now() / 1000)),
+        );
+        return await this.sendFileResponse(
+          req,
+          res,
+          attachment,
+          'private',
+          remaining,
+        );
+      }
       return await this.sendFileResponse(req, res, attachment, 'public');
     } catch (err) {
       this.logger.error(err);
@@ -689,6 +704,7 @@ export class AttachmentController {
     res: FastifyReply,
     attachment: Attachment,
     cacheScope: 'private' | 'public',
+    maxAgeSeconds = 3600,
   ) {
     const fileSize = Number(attachment.fileSize);
     const rangeHeader = req.headers.range;
@@ -730,7 +746,7 @@ export class AttachmentController {
           'Content-Type': attachment.mimeType,
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Content-Length': end - start + 1,
-          'Cache-Control': `${cacheScope}, max-age=3600`,
+          'Cache-Control': `${cacheScope}, max-age=${maxAgeSeconds}`,
         });
 
         return res.send(fileStream);
@@ -743,7 +759,7 @@ export class AttachmentController {
 
     res.headers({
       'Content-Type': attachment.mimeType,
-      'Cache-Control': `${cacheScope}, max-age=3600`,
+      'Cache-Control': `${cacheScope}, max-age=${maxAgeSeconds}`,
     });
 
     const isSvg = attachment.fileExt === '.svg';

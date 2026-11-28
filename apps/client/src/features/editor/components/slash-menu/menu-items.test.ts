@@ -60,6 +60,62 @@ describe("slash menu", () => {
   );
 });
 
+describe("drawing items", () => {
+  const editorIn = (mode: "page" | "none") =>
+    ({
+      can: () => ({
+        insertTabs: () => true,
+        editTemplatePlaceholder: () => false,
+      }),
+      view: {
+        dom: {
+          closest: () =>
+            mode === "none" ? null : { getAttribute: () => mode },
+        },
+      },
+    }) as unknown as Editor;
+
+  it("keeps the upstream Excalidraw item, and /excalidraw finds only it", () => {
+    const found = titles("excalidraw", editorIn("page"));
+    expect(found).toContain("Excalidraw (Whiteboard)");
+    expect(found).not.toContain("Whiteboard");
+  });
+
+  it("offers both drawing items on a page", () => {
+    const found = titles("whiteboard", editorIn("page"));
+    expect(found).toContain("Excalidraw (Whiteboard)");
+    expect(found).toContain("Whiteboard");
+  });
+
+  it("offers the Excalidraw item where live blocks are not available, such as a template", () => {
+    const found = titles("whiteboard", editorIn("none"));
+    expect(found).toContain("Excalidraw (Whiteboard)");
+    expect(found).not.toContain("Whiteboard");
+  });
+
+  it("the Excalidraw item inserts the upstream Excalidraw block", () => {
+    const item = Object.values(getSuggestionItems({ query: "excalidraw" }))
+      .flat()
+      .find(({ title }) => title === "Excalidraw (Whiteboard)");
+    expect(item).toMatchObject({
+      description: "Draw and sketch excalidraw diagrams",
+      searchTerms: ["diagrams", "draw", "sketch", "whiteboard"],
+    });
+    const run = vi.fn();
+    const setExcalidraw = vi.fn(() => ({ run }));
+    const chain = {
+      focus: () => chain,
+      deleteRange: () => ({ setExcalidraw }),
+    };
+    item!.command({
+      editor: { chain: () => chain } as any,
+      range: { from: 1, to: 2 },
+    });
+    expect(setExcalidraw).toHaveBeenCalled();
+    expect(run).toHaveBeenCalled();
+  });
+});
+
 describe("inserting a recently updated block", () => {
   let editor: Editor;
   const design = "de44053e-d614-453b-9706-1737faf19b87";

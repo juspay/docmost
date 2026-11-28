@@ -9,6 +9,7 @@ import {
   IconCopy,
   IconDotsVertical,
   IconFileExport,
+  IconLayoutColumns,
   IconLink,
   IconStar,
   IconStarFilled,
@@ -30,6 +31,7 @@ import {
   useAddFavoriteMutation,
   useRemoveFavoriteMutation,
 } from "@/features/favorite/queries/favorite-query";
+import { useSplitView } from "@/features/split-view/use-split-view.ts";
 import { useExportDisabled } from "@/ee/security/hooks/use-export-disabled.ts";
 
 import { treeDataAtom } from "@/features/page/tree/atoms/tree-data-atom.ts";
@@ -71,6 +73,7 @@ export function NodeMenu({ node, canEdit }: NodeMenuProps) {
   const addFavorite = useAddFavoriteMutation();
   const removeFavorite = useRemoveFavoriteMutation();
   const isFavorited = favoriteIds.has(node.id);
+  const splitView = useSplitView();
 
   const handleCopyLink = () => {
     const pageUrl =
@@ -168,6 +171,19 @@ export function NodeMenu({ node, canEdit }: NodeMenuProps) {
           >
             {t("Copy link")}
           </Menu.Item>
+
+          {splitView.available && (
+            <Menu.Item
+              leftSection={<IconLayoutColumns size={16} />}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                splitView.open(node.slugId);
+              }}
+            >
+              {t("Open in split view")}
+            </Menu.Item>
+          )}
 
           <Menu.Item
             leftSection={

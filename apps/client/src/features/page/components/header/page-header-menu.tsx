@@ -7,6 +7,7 @@ import {
   IconEyeOff,
   IconFileExport,
   IconHistory,
+  IconLayoutColumns,
   IconLink,
   IconList,
   IconMarkdown,
@@ -64,6 +65,8 @@ import {
   useWatchPageMutation,
   useUnwatchPageMutation,
 } from "@/features/page/queries/watcher-query";
+import { useSplitView } from "@/features/split-view/use-split-view.ts";
+import { SplitViewPagePicker } from "@/features/split-view/split-view-page-picker.tsx";
 import { useExportDisabled } from "@/ee/security/hooks/use-export-disabled.ts";
 import { usePrintBlockReason } from "@/ee/security/hooks/use-disable-print.ts";
 
@@ -196,6 +199,11 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
   const { data: watchStatus } = useWatchStatusQuery(page?.id);
   const watchPage = useWatchPageMutation();
   const unwatchPage = useUnwatchPageMutation();
+  const splitView = useSplitView();
+  const [
+    splitPickerOpened,
+    { open: openSplitPicker, close: closeSplitPicker },
+  ] = useDisclosure(false);
 
   const handleCopyLink = () => {
     const pageUrl =
@@ -277,6 +285,15 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
           >
             {t("Copy link")}
           </Menu.Item>
+
+          {splitView.available && (
+            <Menu.Item
+              leftSection={<IconLayoutColumns size={16} />}
+              onClick={openSplitPicker}
+            >
+              {t("Open in split view")}
+            </Menu.Item>
+          )}
 
           {!page?.isBase && (
             <Tooltip
@@ -465,6 +482,11 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
           </>
         </Menu.Dropdown>
       </Menu>
+
+      <SplitViewPagePicker
+        opened={splitPickerOpened}
+        onClose={closeSplitPicker}
+      />
 
       <ExportModal
         type="page"

@@ -236,7 +236,7 @@ describe('PublicSpaceService', () => {
     });
 
     it('omits the recently updated block from the published space homepage', async () => {
-      const share = new ShareService(null, null, null, null, null, null);
+      const share = new ShareService(null, null, null, null, null, null, null);
       const { service, shareService } = makeService({
         pageRepo: {
           findById: jest.fn().mockResolvedValue({

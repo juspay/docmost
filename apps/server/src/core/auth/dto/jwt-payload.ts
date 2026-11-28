@@ -34,6 +34,9 @@ export type JwtAttachmentPayload = {
   pageId: string;
   workspaceId: string;
   type: 'attachment';
+  // set when the token belongs to a link that expires: private caching only
+  expiring?: true;
+  exp?: number;
 };
 
 export interface JwtMfaTokenPayload {

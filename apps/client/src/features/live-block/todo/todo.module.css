@@ -1,0 +1,459 @@
+.root {
+  --todo-fire: #ff5a1f;
+  --todo-soft: light-dark(
+    var(--mantine-color-gray-3),
+    var(--mantine-color-dark-4)
+  );
+  --todo-surface: light-dark(
+    var(--mantine-color-gray-0),
+    var(--mantine-color-dark-8)
+  );
+  --todo-card: light-dark(
+    var(--mantine-color-white),
+    var(--mantine-color-dark-6)
+  );
+  --todo-border: var(--mantine-color-default-border);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  background: var(--todo-surface);
+}
+
+/* ----- toolbar ----- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--todo-border);
+  background: var(--mantine-color-body);
+  flex-shrink: 0;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.overall {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+/* ----- canvas ----- */
+
+.viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-image: radial-gradient(var(--todo-soft) 1px, transparent 1px);
+}
+
+.viewportPanning {
+  cursor: grabbing;
+}
+
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.hint {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.5rem;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  pointer-events: none;
+}
+
+.emptyCanvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--mantine-color-dimmed);
+  pointer-events: none;
+}
+
+.emptyCanvas > * {
+  pointer-events: auto;
+}
+
+/* ----- card ----- */
+
+.card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--todo-card);
+  border: 1px solid var(--todo-border);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-xs);
+  cursor: default;
+  text-align: left;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--todo-border);
+  cursor: grab;
+}
+
+.grip {
+  display: inline-flex;
+  color: var(--mantine-color-dimmed);
+}
+
+.cardTitle {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  padding: 0.125rem 0.25rem;
+}
+
+.cardTitle:focus {
+  outline: none;
+  border-color: var(--mantine-color-blue-5);
+}
+
+.cardRatings {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.count {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  height: 3px;
+  background: var(--todo-soft);
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--mantine-color-teal-6);
+}
+
+.nodes {
+  display: flex;
+  flex-direction: column;
+  padding: 0.375rem 0.5rem;
+  gap: 1px;
+}
+
+.empty {
+  margin: 0.25rem 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.cardFoot {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  border-radius: 4px;
+}
+
+.resizeHandle:hover,
+.resizeHandleExplicit:hover {
+  background: var(--mantine-color-blue-light);
+}
+
+.resizeHandleExplicit {
+  border-right: 2px solid var(--mantine-color-blue-3);
+}
+
+/* ----- item ----- */
+
+.node {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+  padding: 0 0.125rem;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.row:hover,
+.row:focus-within {
+  background: light-dark(
+    var(--mantine-color-gray-1),
+    var(--mantine-color-dark-5)
+  );
+}
+
+.rowDone .text {
+  text-decoration: line-through;
+  color: var(--mantine-color-dimmed);
+}
+
+.twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  flex-shrink: 0;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.twistyCollapsed {
+  transform: rotate(0deg);
+}
+
+.twistyHidden {
+  visibility: hidden;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1.5px solid var(--mantine-color-gray-5);
+  border-radius: 4px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+}
+
+.checkChecked {
+  background: var(--mantine-color-teal-6);
+  border-color: var(--mantine-color-teal-6);
+}
+
+.sectionMark {
+  width: 4px;
+  height: 14px;
+  margin: 0 6px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--mantine-color-blue-5);
+}
+
+.nodeSection > .row .text {
+  font-weight: 700;
+}
+
+.text {
+  flex: 1;
+  min-width: 3rem;
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0.125rem 0;
+}
+
+.text:focus {
+  outline: none;
+}
+
+.actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  /* floats above the row so showing it never moves the text under the pointer */
+  position: absolute;
+  top: -13px;
+  right: 4px;
+  z-index: 2;
+  padding: 1px 3px;
+  background: var(--todo-card);
+  border: 1px solid var(--todo-border);
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: var(--mantine-shadow-xs);
+}
+
+.row:hover .actions,
+.row:focus-within .actions {
+  display: flex;
+}
+
+.children {
+  margin-left: 0.5rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--todo-border);
+}
+
+.ratings {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ----- ratings ----- */
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  background: transparent;
+  border: 1px solid var(--todo-border);
+  border-radius: 9px;
+  opacity: 0.55;
+}
+
+button.rating {
+  cursor: pointer;
+}
+
+/* an unset rating shows only while its row or card header is hovered or focused */
+.row:not(:hover):not(:focus-within) .rating[data-unset],
+.cardHead:not(:hover):not(:focus-within) .rating[data-unset] {
+  display: none;
+}
+
+button.rating:hover,
+.ratingSet {
+  opacity: 1;
+}
+
+.ratingKey {
+  line-height: 1;
+}
+
+.marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.bar {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--todo-soft);
+}
+
+.bar1 {
+  height: 5px;
+}
+
+.bar2 {
+  height: 8px;
+}
+
+.bar3 {
+  height: 11px;
+}
+
+.dot {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--todo-soft);
+}
+
+.markLit.bar {
+  background: var(--mantine-color-blue-6);
+}
+
+.markLit.dot {
+  background: var(--mantine-color-grape-6);
+}
+
+.flame {
+  display: block;
+  fill: var(--todo-soft);
+  transition: fill 120ms ease;
+}
+
+.flameLit {
+  fill: var(--todo-fire);
+}
+
+/* ----- read-only ----- */
+
+.readOnly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--todo-surface);
+}
+
+.readOnlyCard {
+  position: relative;
+  max-width: 100%;
+  background: var(--todo-card);
+  border: 1px solid var(--todo-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+.readOnlyTitle {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.readOnlyText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--mantine-font-size-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

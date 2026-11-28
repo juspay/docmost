@@ -21,6 +21,7 @@ import SsoLogin from "@/ee/components/sso-login.tsx";
 import { useWorkspacePublicDataQuery } from "@/features/workspace/queries/workspace-query.ts";
 import { Error404 } from "@/components/ui/error-404.tsx";
 import React from "react";
+import { PasskeyLoginButton } from "@/features/passkey/components/passkey-login-button.tsx";
 import { AuthLayout } from "./auth-layout.tsx";
 
 const formSchema = z.object({
@@ -124,6 +125,8 @@ export function LoginForm() {
                   {t("Sign In")}
                 </Button>
               </form>
+
+              <PasskeyLoginButton />
             </>
           )}
         </Box>

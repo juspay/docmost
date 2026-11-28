@@ -11,6 +11,7 @@ import {
   IconCoin,
   IconLock,
   IconKey,
+  IconFingerprint,
   IconWorld,
   IconSparkles,
   IconPlug,
@@ -21,7 +22,7 @@ import {
 import { Link, useLocation } from "react-router-dom";
 import classes from "./settings.module.css";
 import { useTranslation } from "react-i18next";
-import { isCloud } from "@/lib/config.ts";
+import { isAgentMcpEnabled, isCloud } from "@/lib/config.ts";
 import useUserRole from "@/hooks/use-user-role.tsx";
 import { useAtom } from "jotai";
 import { entitlementAtom } from "@/ee/entitlement/entitlement-atom";
@@ -56,6 +57,8 @@ type DataItem = {
   role?: "admin" | "owner";
   env?: "cloud" | "selfhosted";
   requiresInstalledIntegration?: boolean;
+  requiresAgentMcp?: boolean;
+  hiddenUnderSso?: boolean;
 };
 
 type DataGroup = {
@@ -74,10 +77,24 @@ const groupedData: DataGroup[] = [
         path: "/settings/account/preferences",
       },
       {
+        label: "Passkeys",
+        icon: IconFingerprint,
+        path: "/settings/account/passkeys",
+        env: "selfhosted",
+        // a passkey cannot be used where single sign-on is enforced
+        hiddenUnderSso: true,
+      },
+      {
         label: "API keys",
         icon: IconKey,
         path: "/settings/account/api-keys",
         feature: Feature.API_KEYS,
+      },
+      {
+        label: "Access tokens",
+        icon: IconKey,
+        path: "/settings/account/access-tokens",
+        requiresAgentMcp: true,
       },
       {
         label: "Connections",
@@ -196,6 +213,8 @@ export default function SettingsSidebar() {
     if (item.requiresInstalledIntegration && !installedIntegrations?.length) {
       return false;
     }
+    if (item.requiresAgentMcp && !isAgentMcpEnabled()) return false;
+    if (item.hiddenUnderSso && workspace?.enforceSso) return false;
     return true;
   };
 

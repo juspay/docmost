@@ -36,6 +36,8 @@ import {
   IAuditService,
 } from '../../integrations/audit/audit.service';
 import { ApiKeyScope } from '../../common/decorators/api-key-scope.decorator';
+import { LiveBlockService } from '../live-block/live-block.service';
+import { SharedLiveBlockDto } from '../live-block/dto/live-block.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('shares')
@@ -48,6 +50,7 @@ export class ShareController {
     private readonly pageAccessService: PageAccessService,
     private readonly licenseCheckService: LicenseCheckService,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
+    private readonly liveBlockService: LiveBlockService,
   ) {}
 
   @ApiKeyScope('read')
@@ -92,6 +95,28 @@ export class ShareController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
+  @Post('/live-block')
+  async getSharedLiveBlock(
+    @Body() dto: SharedLiveBlockDto,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    // through getSharedPage, so every rule on a shared page covers its blocks
+    const { page, share } = await this.shareService.getSharedPage(
+      { pageId: dto.pageId, shareId: dto.shareId },
+      workspace.id,
+    );
+    const sharingAllowed = await this.shareService.isSharingAllowed(
+      workspace.id,
+      share.spaceId,
+    );
+    if (!sharingAllowed) {
+      throw new NotFoundException('Shared page not found');
+    }
+    return this.liveBlockService.getSnapshot(dto.blockId, page);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
   @Post('/info')
   async getShare(@Body() dto: ShareIdDto) {
     const share = await this.shareRepo.findById(dto.shareId, {
@@ -109,6 +134,7 @@ export class ShareController {
     if (!sharingAllowed) {
       throw new NotFoundException('Share not found');
     }
+    await this.shareService.assertShareUsable(share);
 
     return share;
   }
@@ -142,7 +168,9 @@ export class ShareController {
 
     await this.pageAccessService.validateCanView(page, user);
 
-    return this.shareService.getShareForPage(page.id, workspace.id);
+    return this.shareService.getShareForPage(page.id, workspace.id, {
+      preferOwn: true,
+    });
   }
 
   @HttpCode(HttpStatus.OK)

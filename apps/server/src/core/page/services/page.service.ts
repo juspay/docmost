@@ -31,6 +31,9 @@ import { getPageTitle } from '../../../common/helpers';
 import { dbOrTx, executeTx } from '@docmost/db/utils';
 import { AttachmentRepo } from '@docmost/db/repos/attachment/attachment.repo';
 import { v7 as uuid7 } from 'uuid';
+import { copyAttachment } from '../../attachment/attachment-copy.util';
+import { LiveBlockService } from '../../live-block/live-block.service';
+import { replaceLiveBlockIds } from '../../live-block/page-content.util';
 import {
   createYdocFromJson,
   getAttachmentIds,
@@ -105,6 +108,7 @@ export class PageService {
     private readonly shareService: ShareService,
     private readonly unsplashService: UnsplashService,
     private readonly pageVerificationInvalidationService: PageVerificationInvalidationService,
+    private readonly liveBlockService: LiveBlockService,
   ) {}
 
   async findById(
@@ -867,6 +871,8 @@ export class PageService {
         .map((attachment) => attachment.id),
     );
 
+    const liveBlockPlan = await this.liveBlockService.planPageCopies(pages);
+
     const insertablePages: InsertablePage[] = await Promise.all(
       pages.map(async (page) => {
         const pageContent = getProsemirrorContent(page.content);
@@ -943,10 +949,10 @@ export class PageService {
           }
         });
 
-        const prosemirrorJson = replaceAttachmentIds(
-          prosemirrorDoc.toJSON(),
-          copiedAttachmentIds,
-        );
+        const prosemirrorJson = replaceLiveBlockIds(
+          replaceAttachmentIds(prosemirrorDoc.toJSON(), copiedAttachmentIds),
+          liveBlockPlan.blockIdMap,
+        ) as any;
 
         // Add "Copy of " prefix to the root page title only for duplicates in same space
         let title = page.title;
@@ -983,22 +989,39 @@ export class PageService {
       }),
     );
 
-    const copiedRestrictions = await executeTx(this.db, async (trx) => {
-      await trx.insertInto('pages').values(insertablePages).execute();
-      await this.labelRepo.copyLabelsToPages(
-        new Map([...pageMap].map(([oldId, entry]) => [oldId, entry.newPageId])),
-        trx,
-      );
-      return this.pagePermissionRepo.copyRestrictions(
-        restrictionCopies,
-        {
-          spaceId,
-          workspaceId: rootPage.workspaceId,
-          writerId: authUser.id,
-        },
-        trx,
-      );
-    });
+    let copiedRestrictions: number;
+    try {
+      copiedRestrictions = await executeTx(this.db, async (trx) => {
+        await trx.insertInto('pages').values(insertablePages).execute();
+        await this.liveBlockService.insertPageCopies(
+          liveBlockPlan,
+          new Map(
+            [...pageMap].map(([oldId, entry]) => [oldId, entry.newPageId]),
+          ),
+          trx,
+          { spaceId, creatorId: authUser.id },
+        );
+        await this.labelRepo.copyLabelsToPages(
+          new Map(
+            [...pageMap].map(([oldId, entry]) => [oldId, entry.newPageId]),
+          ),
+          trx,
+        );
+        return this.pagePermissionRepo.copyRestrictions(
+          restrictionCopies,
+          {
+            spaceId,
+            workspaceId: rootPage.workspaceId,
+            writerId: authUser.id,
+          },
+          trx,
+        );
+      });
+    } catch (err) {
+      // the block rows rolled back; the files their attachments copied must go too
+      await this.liveBlockService.removeCopiedFiles(liveBlockPlan);
+      throw err;
+    }
 
     if (copiedRestrictions > 0) {
       await this.wsService.invalidateSpaceRestrictionCache(spaceId);
@@ -1053,34 +1076,13 @@ export class PageService {
             continue;
           }
 
-          const newAttachmentId = copiedAttachmentIds.get(attachment.id);
-
-          const newPageId = owner.newPageId;
-
-          const newPathFile = attachment.filePath.replace(
-            attachment.id,
-            newAttachmentId,
-          );
-
           try {
-            await this.storageService.copy(attachment.filePath, newPathFile);
-
-            await this.db
-              .insertInto('attachments')
-              .values({
-                id: newAttachmentId,
-                type: attachment.type,
-                filePath: newPathFile,
-                fileName: attachment.fileName,
-                fileSize: attachment.fileSize,
-                mimeType: attachment.mimeType,
-                fileExt: attachment.fileExt,
-                creatorId: authUser.id,
-                workspaceId: attachment.workspaceId,
-                pageId: newPageId,
-                spaceId: spaceId,
-              })
-              .execute();
+            await copyAttachment(this.storageService, this.db, attachment, {
+              attachmentId: copiedAttachmentIds.get(attachment.id),
+              pageId: owner.newPageId,
+              spaceId,
+              creatorId: authUser.id,
+            });
           } catch (err) {
             this.logger.error(
               `Duplicate page: failed to copy attachment ${attachment.id}`,

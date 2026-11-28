@@ -5,7 +5,7 @@ import WorkspaceLocaleLayout from "@/features/workspace/components/workspace-loc
 import { Error404 } from "@/components/ui/error-404.tsx";
 import { PageRoute } from "@/pages/page/page-route";
 import { MAIN_CONTENT_ID } from "@/components/ui/skip-to-main.tsx";
-import { isBetaBaseForms, isCloud } from "@/lib/config.ts";
+import { isAgentMcpEnabled, isBetaBaseForms, isCloud } from "@/lib/config.ts";
 import { lazyWithPrefetch, prefetchLazyComponents } from "@/lib/lazy-prefetch.ts";
 import { useTranslation } from "react-i18next";
 import { useRedirectToCloudSelect } from "@/ee/hooks/use-redirect-to-cloud-select.tsx";
@@ -30,6 +30,9 @@ const GroupInfo = lazyWithPrefetch(() => import("./pages/settings/group/group-in
 const Spaces = lazyWithPrefetch(() => import("@/pages/settings/space/spaces.tsx"));
 const AccountPreferences = lazyWithPrefetch(
   () => import("@/pages/settings/account/account-preferences.tsx"),
+);
+const AccountPasskeys = lazyWithPrefetch(
+  () => import("@/pages/settings/account/account-passkeys.tsx"),
 );
 const SpaceHome = lazyWithPrefetch(() => import("@/pages/space/space-home.tsx"));
 const PageRedirect = lazyWithPrefetch(() => import("@/pages/page/page-redirect.tsx"));
@@ -72,6 +75,9 @@ const MfaSetupRequiredPage = lazyWithPrefetch(() =>
   })),
 );
 const SpaceTrash = lazyWithPrefetch(() => import("@/pages/space/space-trash.tsx"));
+const AccountAccessTokens = lazyWithPrefetch(
+  () => import("@/pages/settings/account/account-access-tokens.tsx"),
+);
 const UserApiKeys = lazyWithPrefetch(() => import("@/ee/api-key/pages/user-api-keys"));
 const WorkspaceApiKeys = lazyWithPrefetch(
   () => import("@/ee/api-key/pages/workspace-api-keys"),
@@ -219,6 +225,15 @@ export default function App() {
               path={"account/preferences"}
               element={<AccountPreferences />}
             />
+            {!isCloud() && (
+              <Route path={"account/passkeys"} element={<AccountPasskeys />} />
+            )}
+            {isAgentMcpEnabled() && (
+              <Route
+                path={"account/access-tokens"}
+                element={<AccountAccessTokens />}
+              />
+            )}
             <Route path={"account/api-keys"} element={<UserApiKeys />} />
             <Route
               path={"account/api-keys/authorized-apps"}

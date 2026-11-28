@@ -11,6 +11,8 @@ import * as Y from 'yjs';
 import { PersistenceExtension } from './persistence.extension';
 import { tiptapExtensions } from '../collaboration.util';
 import { QueueJob } from '../../integrations/queue/constants';
+import { pushElements, readElements } from '@docmost/live-blocks';
+import { LiveBlockCollabService } from '../live-block/live-block-collab.service';
 
 const textDoc = (text: string, marks?: object[]) => ({
   type: 'doc',
@@ -66,6 +68,7 @@ describe('PersistenceExtension.onStoreDocument', () => {
         notifyInvalidated: jest.fn().mockResolvedValue(undefined),
       } as any,
       { getPageHistoryInterval: () => 5 * 60_000 } as any,
+      {} as any,
     );
   });
 
@@ -173,6 +176,7 @@ function setup() {
       notifyInvalidated: jest.fn(),
     } as any,
     { getPageHistoryInterval: () => 300_000 } as any,
+    {} as any,
   );
   return { extension, page, repo, queue, history, transclusion };
 }
@@ -366,5 +370,185 @@ describe('PersistenceExtension document storage', () => {
     const error = new Error('Database unavailable');
     repo.saveYdocState.mockRejectedValueOnce(error);
     await expect(extension.onStoreDocument(payload)).rejects.toBe(error);
+  });
+});
+
+describe('block documents', () => {
+  const BLOCK = '0193c7a0-1111-7abc-8def-000000000001';
+  const NAME = `block.${BLOCK}`;
+
+  function setupBlock() {
+    const pageRepo = {
+      findById: jest.fn(),
+      saveYdocState: jest.fn(),
+      updatePage: jest.fn(),
+    };
+    const stored = new Y.Doc();
+    pushElements(stored, [{ id: 'r1', version: 2, type: 'rectangle' }]);
+    const liveBlockRepo = {
+      findById: jest.fn(async () => ({
+        id: BLOCK,
+        kind: 'whiteboard',
+        pageId: 'page-1',
+        workspaceId: 'ws-1',
+        ydoc: Buffer.from(Y.encodeStateAsUpdate(stored)),
+      })),
+      saveYdoc: jest.fn(async () => undefined),
+      saveSnapshot: jest.fn(async () => undefined),
+    };
+    const liveBlockCollab = new LiveBlockCollabService(liveBlockRepo as any);
+    const queue = { add: jest.fn() };
+    const history = { addContributors: jest.fn() };
+    const extension = new PersistenceExtension(
+      pageRepo as any,
+      { transaction: () => ({ execute: (fn) => fn({}) }) } as any,
+      queue as any,
+      queue as any,
+      queue as any,
+      history as any,
+      {
+        syncPageTransclusions: jest.fn(),
+        syncPageReferences: jest.fn(),
+      } as any,
+      { invalidateForEdit: jest.fn(), notifyInvalidated: jest.fn() } as any,
+      { getPageHistoryInterval: () => 300_000 } as any,
+      liveBlockCollab,
+    );
+    return {
+      extension,
+      pageRepo,
+      liveBlockRepo,
+      liveBlockCollab,
+      queue,
+      history,
+    };
+  }
+
+  const storePayload = (document: Y.Doc, instance: any = new Hocuspocus()) =>
+    ({
+      document,
+      documentName: NAME,
+      instance,
+      lastContext: { user: { id: 'editor' } },
+    }) as any;
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('loads a block from live_blocks and never queries pages', async () => {
+    const { extension, pageRepo, liveBlockRepo } = setupBlock();
+    const document = new Document(NAME);
+    const loaded = (await extension.onLoadDocument({
+      document,
+      documentName: NAME,
+    } as onLoadDocumentPayload)) as Y.Doc;
+    expect(readElements(loaded)).toEqual([
+      { id: 'r1', version: 2, type: 'rectangle' },
+    ]);
+    expect(liveBlockRepo.findById).toHaveBeenCalledWith(BLOCK, {
+      includeYdoc: true,
+    });
+    expect(pageRepo.findById).not.toHaveBeenCalled();
+    document.destroy();
+  });
+
+  it('stores the ydoc and then a snapshot built for the block kind', async () => {
+    const { extension, pageRepo, liveBlockRepo } = setupBlock();
+    const doc = new Y.Doc();
+    pushElements(doc, [{ id: 'r9', version: 1, type: 'ellipse' }]);
+    await extension.onStoreDocument(storePayload(doc));
+    expect(liveBlockRepo.saveYdoc).toHaveBeenCalledWith(
+      BLOCK,
+      Buffer.from(Y.encodeStateAsUpdate(doc)),
+    );
+    expect(liveBlockRepo.saveSnapshot).toHaveBeenCalledWith(
+      BLOCK,
+      {
+        kind: 'whiteboard',
+        elements: [{ id: 'r9', version: 1, type: 'ellipse' }],
+        files: {},
+      },
+      null,
+    );
+    expect(pageRepo.findById).not.toHaveBeenCalled();
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('the document is saved even when the snapshot builder throws', async () => {
+    const { extension, liveBlockRepo, liveBlockCollab } = setupBlock();
+    jest.spyOn(liveBlockCollab as any, 'snapshotOf').mockImplementation(() => {
+      throw new Error('cannot build');
+    });
+    await expect(
+      extension.onStoreDocument(storePayload(new Y.Doc())),
+    ).resolves.toBeUndefined();
+    expect(liveBlockRepo.saveYdoc).toHaveBeenCalled();
+    expect(liveBlockRepo.saveSnapshot).toHaveBeenCalledWith(
+      BLOCK,
+      null,
+      'cannot build',
+    );
+  });
+
+  it('does not record page history or contributors for a block', async () => {
+    const { extension, queue, history, pageRepo } = setupBlock();
+    await extension.onChange({
+      documentName: NAME,
+      context: { user: { id: 'editor' } },
+    } as onChangePayload);
+    expect((extension as any).contributors.size).toBe(0);
+    expect((extension as any).lastChanges.size).toBe(0);
+    await extension.onStoreDocument(storePayload(new Y.Doc()));
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(history.addContributors).not.toHaveBeenCalled();
+    expect(pageRepo.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('a failed ydoc save re-queues the store and rethrows', async () => {
+    const { extension, liveBlockRepo } = setupBlock();
+    const error = new Error('db down');
+    liveBlockRepo.saveYdoc.mockRejectedValueOnce(error);
+    const document = new Y.Doc();
+    const instance = {
+      documents: new Map([[NAME, document]]),
+      debouncer: { isDebounced: jest.fn(() => false) },
+      storeDocumentHooks: jest.fn(async () => undefined),
+    };
+    const payload = storePayload(document, instance);
+    await expect(extension.onStoreDocument(payload)).rejects.toBe(error);
+    expect(instance.storeDocumentHooks).toHaveBeenCalledWith(document, payload);
+    expect(liveBlockRepo.saveSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('afterUnloadDocument forgets the block', async () => {
+    const { extension, liveBlockCollab } = setupBlock();
+    await liveBlockCollab.resolve(BLOCK, 'ws-1');
+    expect(liveBlockCollab.pageIdOf(NAME)).toBe('page-1');
+    await extension.afterUnloadDocument({ documentName: NAME } as any);
+    expect(liveBlockCollab.pageIdOf(NAME)).toBeUndefined();
+  });
+
+  it('awareness is still sanitised for a block document', async () => {
+    const { extension } = setupBlock();
+    const states = new Map<number, any>([
+      [
+        1,
+        {
+          user: { id: 'someone-else', name: 'Mallory' },
+          pointer: { x: 1, y: 2 },
+        },
+      ],
+      [2, 'junk'],
+    ]);
+    await extension.beforeHandleAwareness({
+      states,
+      context: { user: { id: 'editor', avatarUrl: null } },
+      documentName: NAME,
+    } as any);
+    expect(states.get(1).user.id).toBe('editor');
+    expect(states.has(2)).toBe(false);
   });
 });

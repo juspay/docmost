@@ -1,12 +1,18 @@
+import { TiptapTransformer } from '@hocuspocus/transformer';
+import { tiptapExtensions } from '../collaboration.util';
 import { Forbidden } from '@hocuspocus/common';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { AuthenticationExtension } from './authentication.extension';
 import { COLLAB_ACCESS_RECHECK_CHANNEL } from '../constants';
+import { LiveBlockCollabService } from '../live-block/live-block-collab.service';
 
 const WRITER = [{ userId: 'any', role: 'writer' }];
 const READER = [{ userId: 'any', role: 'reader' }];
 const NO_ACCESS = JSON.stringify({ type: 'page.permissions', access: 'none' });
-const READ_ACCESS = JSON.stringify({ type: 'page.permissions', access: 'read' });
+const READ_ACCESS = JSON.stringify({
+  type: 'page.permissions',
+  access: 'read',
+});
 
 function makeConnection(userId: string) {
   return {
@@ -37,7 +43,12 @@ async function makeExtension(
     })),
   };
   const extension = new AuthenticationExtension(
-    { verifyJwt: jest.fn(async (token: string) => ({ sub: token, workspaceId: 'ws_1' })) } as any,
+    {
+      verifyJwt: jest.fn(async (token: string) => ({
+        sub: token,
+        workspaceId: 'ws_1',
+      })),
+    } as any,
     {
       findById: jest.fn(async (id: string) => {
         if (id === 'user_broken') throw new Error('db down');
@@ -51,11 +62,15 @@ async function makeExtension(
         workspaceId: id === 'page_other_ws' ? 'ws_2' : 'ws_1',
         deletedAt: null,
       })),
-      getPageAndDescendants: jest.fn(async (id: string) => [{ id }, { id: 'child_page' }]),
+      getPageAndDescendants: jest.fn(async (id: string) => [
+        { id },
+        { id: 'child_page' },
+      ]),
     } as any,
     spaceMemberRepo as any,
     pagePermissionRepo as any,
     { getOrThrow: () => ({ duplicate: () => subscriber }) } as any,
+    new LiveBlockCollabService({ findById: jest.fn() } as any),
   );
   const instance = {
     documents: new Map(
@@ -199,9 +214,9 @@ describe('AuthenticationExtension onAuthenticate', () => {
     await extension.onAuthenticate(readerPayload);
     expect(readerPayload.connectionConfig.readOnly).toBe(true);
 
-    await expect(extension.onAuthenticate(payload('user_none'))).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      extension.onAuthenticate(payload('user_none')),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects pages from another workspace', async () => {
@@ -217,5 +232,245 @@ describe('AuthenticationExtension onAuthenticate', () => {
       } as any),
     ).rejects.toThrow(NotFoundException);
     expect(spaceMemberRepo.getUserSpaceRoles).not.toHaveBeenCalled();
+  });
+});
+
+describe('block documents', () => {
+  const BLOCK = '0193c7a0-1111-7abc-8def-000000000001';
+  const BLOCK_OTHER_WS = '0193c7a0-1111-7abc-8def-000000000002';
+  const BLOCK_TRASHED = '0193c7a0-1111-7abc-8def-000000000003';
+  const rows: Record<string, any> = {
+    [BLOCK]: {
+      id: BLOCK,
+      kind: 'whiteboard',
+      pageId: 'page_1',
+      workspaceId: 'ws_1',
+    },
+    [BLOCK_OTHER_WS]: {
+      id: BLOCK_OTHER_WS,
+      kind: 'whiteboard',
+      pageId: 'page_x',
+      workspaceId: 'ws_2',
+    },
+    [BLOCK_TRASHED]: {
+      id: BLOCK_TRASHED,
+      kind: 'whiteboard',
+      pageId: 'page_trashed',
+      workspaceId: 'ws_1',
+    },
+  };
+
+  const blockNode = (blockId: string) => ({
+    type: 'doc',
+    content: [{ type: 'whiteboard', attrs: { blockId } }],
+  });
+  // the blocks each page's stored content holds
+  let contents: Record<string, unknown>;
+  beforeEach(() => {
+    contents = {
+      page_1: blockNode(BLOCK),
+      page_trashed: blockNode(BLOCK_TRASHED),
+    };
+  });
+
+  function setup(spaceRoles: Record<string, unknown[] | undefined>) {
+    const liveBlockRepo = { findById: jest.fn(async (id: string) => rows[id]) };
+    const liveBlockCollab = new LiveBlockCollabService(liveBlockRepo as any);
+    const pageRepo = {
+      findById: jest.fn(async (id: string) => ({
+        id,
+        spaceId: 'space_1',
+        workspaceId: 'ws_1',
+        deletedAt: id === 'page_trashed' ? new Date() : null,
+        content: contents[id] ?? null,
+      })),
+      getPageAndDescendants: jest.fn(async (id: string) => [{ id }]),
+    };
+    const userRepo = {
+      findById: jest.fn(async (id: string) => ({ id, workspaceId: 'ws_1' })),
+    };
+    const spaceMemberRepo = {
+      getUserSpaceRoles: jest.fn(async (userId: string) => spaceRoles[userId]),
+    };
+    const pagePermissionRepo = {
+      canUserEditPage: jest.fn(async () => ({
+        hasAnyRestriction: false,
+        canAccess: true,
+        canEdit: true,
+      })),
+    };
+    const extension = new AuthenticationExtension(
+      {
+        verifyJwt: jest.fn(async (token: string) => ({
+          sub: token,
+          workspaceId: 'ws_1',
+        })),
+      } as any,
+      userRepo as any,
+      pageRepo as any,
+      spaceMemberRepo as any,
+      pagePermissionRepo as any,
+      { getOrThrow: () => ({ duplicate: () => ({ on: jest.fn() }) }) } as any,
+      liveBlockCollab,
+    );
+    const payload = (documentName: string, token: string) =>
+      ({ documentName, token, connectionConfig: { readOnly: false } }) as any;
+    return {
+      extension,
+      payload,
+      pageRepo,
+      userRepo,
+      liveBlockRepo,
+      liveBlockCollab,
+    };
+  }
+
+  it('a writer on the page gets a writable block connection', async () => {
+    const { extension, payload, pageRepo } = setup({ writer: WRITER });
+    const p = payload(`block.${BLOCK}`, 'writer');
+    await expect(extension.onAuthenticate(p)).resolves.toMatchObject({
+      user: { id: 'writer' },
+    });
+    expect(p.connectionConfig.readOnly).toBe(false);
+    expect(pageRepo.findById).toHaveBeenCalledWith('page_1', {
+      includeContent: true,
+    });
+  });
+
+  it('a block removed from its page is refused as not found', async () => {
+    const { extension, payload } = setup({ writer: WRITER });
+    contents.page_1 = { type: 'doc', content: [] };
+    await expect(
+      extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer')),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('a block just added to an open page counts before the page is stored', async () => {
+    const { extension, payload } = setup({ writer: WRITER });
+    contents.page_1 = { type: 'doc', content: [] };
+    const live = TiptapTransformer.toYdoc(
+      blockNode(BLOCK),
+      'default',
+      tiptapExtensions,
+    );
+    await extension.onConfigure({
+      instance: { documents: new Map([['page.page_1', live]]) },
+    } as any);
+    await expect(
+      extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer')),
+    ).resolves.toMatchObject({ user: { id: 'writer' } });
+  });
+
+  it('a block of this page created in the last 2 minutes counts before the page is stored, wherever the page is open', async () => {
+    const { extension, payload } = setup({ writer: WRITER });
+    contents.page_1 = { type: 'doc', content: [] };
+    rows[BLOCK].createdAt = new Date(Date.now() - 30_000);
+    try {
+      await expect(
+        extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer')),
+      ).resolves.toMatchObject({ user: { id: 'writer' } });
+
+      rows[BLOCK].createdAt = new Date(Date.now() - 3 * 60_000);
+      await expect(
+        extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer')),
+      ).rejects.toThrow(NotFoundException);
+
+      // a creation time ahead of this clock (skew, imported data) gets no grace
+      rows[BLOCK].createdAt = new Date(Date.now() + 60 * 60_000);
+      await expect(
+        extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer')),
+      ).rejects.toThrow(NotFoundException);
+    } finally {
+      delete rows[BLOCK].createdAt;
+    }
+  });
+
+  it('a reader on the page gets connectionConfig.readOnly = true', async () => {
+    const { extension, payload } = setup({ reader: READER });
+    const p = payload(`block.${BLOCK}`, 'reader');
+    await extension.onAuthenticate(p);
+    expect(p.connectionConfig.readOnly).toBe(true);
+  });
+
+  it('a person with no access to the page is refused', async () => {
+    const { extension, payload } = setup({ nobody: undefined });
+    await expect(
+      extension.onAuthenticate(payload(`block.${BLOCK}`, 'nobody')),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('an unknown block id is refused as not found', async () => {
+    const { extension, payload } = setup({ writer: WRITER });
+    await expect(
+      extension.onAuthenticate(
+        payload('block.0193c7a0-1111-7abc-8def-0000000000ff', 'writer'),
+      ),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('a block from another workspace is refused as not found', async () => {
+    const { extension, payload, pageRepo } = setup({ writer: WRITER });
+    await expect(
+      extension.onAuthenticate(payload(`block.${BLOCK_OTHER_WS}`, 'writer')),
+    ).rejects.toThrow(NotFoundException);
+    expect(pageRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('block..x and an upper-case id are refused without a database query', async () => {
+    const { extension, payload, pageRepo, userRepo, liveBlockRepo } = setup({
+      writer: WRITER,
+    });
+    for (const name of [
+      'block..x',
+      `block.${BLOCK.toUpperCase()}`,
+      `block.${BLOCK}.x`,
+    ]) {
+      await expect(
+        extension.onAuthenticate(payload(name, 'writer')),
+      ).rejects.toThrow(NotFoundException);
+    }
+    expect(liveBlockRepo.findById).not.toHaveBeenCalled();
+    expect(pageRepo.findById).not.toHaveBeenCalled();
+    expect(userRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('a block on a trashed page is read-only', async () => {
+    const { extension, payload } = setup({ writer: WRITER });
+    const p = payload(`block.${BLOCK_TRASHED}`, 'writer');
+    await extension.onAuthenticate(p);
+    expect(p.connectionConfig.readOnly).toBe(true);
+  });
+
+  it('recheckAccess closes block connections when page access is revoked', async () => {
+    const { extension, payload, liveBlockCollab } = setup({ writer: WRITER });
+    await extension.onAuthenticate(payload(`block.${BLOCK}`, 'writer'));
+    expect(liveBlockCollab.pageIdOf(`block.${BLOCK}`)).toBe('page_1');
+
+    const connection = {
+      context: { user: { id: 'revoked', workspaceId: 'ws_1' } },
+      readOnly: false,
+      close: jest.fn(),
+      sendStateless: jest.fn(),
+    };
+    await extension.onConfigure({
+      instance: {
+        documents: new Map([
+          [
+            `block.${BLOCK}`,
+            { name: `block.${BLOCK}`, getConnections: () => [connection] },
+          ],
+        ]),
+      },
+    } as any);
+    await extension.recheckAccess({ pageIds: ['page_1'] });
+    expect(connection.close).toHaveBeenCalledWith(Forbidden);
+  });
+
+  it('page documents still authenticate as before', async () => {
+    const { extension, payload, liveBlockRepo } = setup({ writer: WRITER });
+    const p = payload('page.page_1', 'writer');
+    await extension.onAuthenticate(p);
+    expect(p.connectionConfig.readOnly).toBe(false);
+    expect(liveBlockRepo.findById).not.toHaveBeenCalled();
   });
 });

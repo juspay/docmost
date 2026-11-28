@@ -1,6 +1,8 @@
 import axios, { AxiosInstance } from "axios";
 import APP_ROUTE from "@/lib/app-route.ts";
 import { isCloud } from "@/lib/config.ts";
+import { isPaneMode } from "@/features/split-view/pane-mode.ts";
+import { postToParent } from "@/features/split-view/pane-messages.ts";
 
 const api: AxiosInstance = axios.create({
   baseURL: "/api",
@@ -87,6 +89,11 @@ api.interceptors.response.use(
 );
 
 function redirectToLogin() {
+  // the pane never shows a login form; its parent window goes to login instead
+  if (isPaneMode()) {
+    postToParent({ type: "docmost:pane-auth-expired" });
+    return;
+  }
   const exemptPaths = [
     APP_ROUTE.AUTH.LOGIN,
     APP_ROUTE.AUTH.SIGNUP,

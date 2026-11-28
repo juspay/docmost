@@ -161,6 +161,7 @@ export default function WorkspaceMembersTable() {
                         userId={user.id}
                         name={user.name}
                         deactivatedAt={user.deactivatedAt}
+                        role={user.role}
                       />
                     )}
                   </Table.Td>

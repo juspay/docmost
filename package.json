@@ -16,7 +16,8 @@
     "server:start": "nx run server:start:prod",
     "email:dev": "nx run server:email:dev",
     "dev": "pnpm concurrently -n \"frontend,backend\" -c \"cyan,green\" \"pnpm run client:dev\" \"pnpm run server:dev\"",
-    "clean": "rm -rf apps/*/dist packages/*/dist apps/client/node_modules/.vite"
+    "clean": "rm -rf apps/*/dist packages/*/dist apps/client/node_modules/.vite",
+    "smoke": "playwright test -c e2e/smoke"
   },
   "dependencies": {
     "@braintree/sanitize-url": "7.1.2",
@@ -81,6 +82,7 @@
   },
   "devDependencies": {
     "@nx/js": "23.3.0",
+    "@playwright/test": "1.63.0",
     "@types/bytes": "3.1.5",
     "@types/qrcode": "1.5.6",
     "@types/turndown": "5.0.6",

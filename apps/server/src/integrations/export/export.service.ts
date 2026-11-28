@@ -44,6 +44,8 @@ import {
 } from '../../common/helpers/prosemirror/utils';
 import { htmlToMarkdown, ItemsByLabel } from '@docmost/editor-ext';
 import { validate as isValidUUID } from 'uuid';
+import { LiveBlockService } from '../../core/live-block/live-block.service';
+import { findLiveBlocks } from '../../core/live-block/page-content.util';
 
 type AllowedAttachment = { id: string; fileName: string; filePath: string };
 
@@ -70,6 +72,7 @@ export class ExportService {
     private readonly domainService: DomainService,
     private readonly spaceMemberRepo: SpaceMemberRepo,
     private readonly userRepo: UserRepo,
+    private readonly liveBlockService: LiveBlockService,
   ) {}
 
   async exportPage(format: string, page: Page) {
@@ -79,7 +82,15 @@ export class ExportService {
       content: [{ type: 'text', text: getPageTitle(page.title) }],
     };
 
-    const prosemirrorJson = getProsemirrorContent(page.content);
+    let prosemirrorJson = getProsemirrorContent(page.content);
+
+    if (findLiveBlocks(prosemirrorJson).length > 0) {
+      prosemirrorJson = (await this.liveBlockService.inlineForExport(
+        prosemirrorJson,
+        page,
+        await this.getWorkspaceBaseUrl(page.workspaceId),
+      )) as typeof prosemirrorJson;
+    }
 
     if (page.title) {
       prosemirrorJson.content.unshift(titleNode);

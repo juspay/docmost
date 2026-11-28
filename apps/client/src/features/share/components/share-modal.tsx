@@ -29,6 +29,7 @@ import useTrial from "@/ee/hooks/use-trial.tsx";
 import { useAtom } from "jotai";
 import { workspaceAtom } from "@/features/user/atoms/current-user-atom.ts";
 import { useSpaceQuery } from "@/features/space/queries/space-query.ts";
+import ShareExpiryControl from "@/features/share/components/share-expiry-control.tsx";
 
 interface ShareModalProps {
   readOnly: boolean;
@@ -223,6 +224,7 @@ export default function ShareModal({ readOnly }: ShareModalProps) {
             </Anchor>
 
             {shareLink}
+            <ShareExpiryControl share={share} readOnly={readOnly} />
           </>
         ) : (
           <>
@@ -248,7 +250,8 @@ export default function ShareModal({ readOnly }: ShareModalProps) {
             {pageIsShared && (
               <>
                 {shareLink}
-                <Group justify="space-between" wrap="nowrap" gap="xl">
+                <ShareExpiryControl share={share} readOnly={readOnly} />
+                <Group justify="space-between" wrap="nowrap" gap="xl" mt="sm">
                   <div>
                     <Text size="sm">{t("Include sub-pages")}</Text>
                     <Text size="xs" c="dimmed">

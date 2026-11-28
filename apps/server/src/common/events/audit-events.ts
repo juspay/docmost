@@ -18,11 +18,17 @@ export const AuditEvent = {
   USER_UPDATED: 'user.updated',
   USER_DEACTIVATED: 'user.deactivated',
   USER_ACTIVATED: 'user.activated',
+  PASSKEY_ADDED: 'passkey.added',
+  PASSKEY_REMOVED: 'passkey.removed',
 
   // API Keys
   API_KEY_CREATED: 'api_key.created',
   API_KEY_UPDATED: 'api_key.updated',
   API_KEY_DELETED: 'api_key.deleted',
+
+  // Personal access tokens (agent MCP)
+  ACCESS_TOKEN_CREATED: 'access_token.created',
+  ACCESS_TOKEN_REVOKED: 'access_token.revoked',
 
   // OAuth
   OAUTH_CLIENT_REGISTERED: 'oauth_client.registered',
@@ -94,6 +100,9 @@ export const AuditEvent = {
   // Share
   SHARE_CREATED: 'share.created',
   SHARE_DELETED: 'share.deleted',
+  SHARE_EXPIRY_SET: 'share.expiry_set',
+  SHARE_EXPIRY_RENEWED: 'share.expiry_renewed',
+  SHARE_EXPIRY_REMOVED: 'share.expiry_removed',
 
   // Import / Export
   PAGE_IMPORTED: 'page.imported',
@@ -161,6 +170,7 @@ export const AuditResource = {
   COMMENT: 'comment',
   SHARE: 'share',
   API_KEY: 'api_key',
+  ACCESS_TOKEN: 'access_token',
   OAUTH_CLIENT: 'oauth_client',
   OAUTH_GRANT: 'oauth_grant',
   INTEGRATION: 'integration',

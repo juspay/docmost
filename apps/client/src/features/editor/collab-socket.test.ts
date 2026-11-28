@@ -105,3 +105,53 @@ it("withholds offline edits from the handshake until the page can accept them", 
     server.destroy();
   }
 });
+
+it("updates of an unbound room are dropped and updates of a bound block room are sent", () => {
+  const name = "block.0193c7a0-1111-7abc-8def-00000000000a";
+  const doc = new Y.Doc();
+  doc.getMap("elements").set("r1", { id: "r1", version: 1 });
+  const send = vi
+    .spyOn(HocuspocusProviderWebsocket.prototype, "send")
+    .mockImplementation(() => undefined);
+  const socket = new PageCollabSocket({
+    autoConnect: false,
+    url: "ws://localhost",
+  });
+  const provider = new HocuspocusProvider({
+    name,
+    websocketProvider: socket,
+    document: doc,
+  });
+  Object.defineProperty(socket, "webSocket", {
+    configurable: true,
+    value: { readyState: WebSocket.OPEN },
+  });
+  const update = () => {
+    const message = createEncoder();
+    writeVarString(message, name);
+    writeVarUint(message, MessageType.Sync);
+    writeVarUint(message, messageYjsUpdate);
+    writeVarUint8Array(message, Y.encodeStateAsUpdate(doc));
+    socket.send(toUint8Array(message));
+  };
+  try {
+    update();
+    expect(send).not.toHaveBeenCalled();
+    const unbind = socket.bindRoom(provider, () => true);
+    update();
+    expect(send).toHaveBeenCalledTimes(1);
+    unbind();
+    update();
+    expect(send).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.defineProperty(socket, "webSocket", {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+    provider.destroy();
+    socket.destroy();
+    send.mockRestore();
+    doc.destroy();
+  }
+});

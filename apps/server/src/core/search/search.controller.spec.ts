@@ -135,6 +135,7 @@ describe('SearchController share-search gate', () => {
         async (workspaceId: string, spaceId: string) =>
           workspaceId === 'ws1' && spaceId === OPEN_SPACE_ID,
       ),
+      assertShareUsable: jest.fn(async () => undefined),
     };
     const shareRepo = {
       findById: jest.fn(async (shareId: string) =>

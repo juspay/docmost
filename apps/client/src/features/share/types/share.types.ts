@@ -1,5 +1,13 @@
 import { IPage } from "@/features/page/types/page.types.ts";
 
+export type SharePeriodDays = 1 | 7 | 30;
+
+export interface IShareExpiry {
+  expiresAt: string;
+  periodDays: SharePeriodDays;
+  expired: boolean;
+}
+
 export interface IShare {
   id: string;
   key: string;
@@ -13,6 +21,10 @@ export interface IShare {
   updatedAt: string;
   deletedAt: string | null;
   sharedPage?: ISharePage;
+  // null when the link never expires
+  expiresAt?: string | null;
+  periodDays?: SharePeriodDays | null;
+  expired?: boolean;
 }
 
 export interface ISharedItem extends IShare {

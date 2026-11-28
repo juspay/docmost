@@ -28,7 +28,8 @@
       ],
       "@docmost/base-formula/client": [
         "../../packages/base-formula/dist/index.client.d.ts"
-      ]
+      ],
+      "@docmost/live-blocks": ["../../packages/live-blocks/dist/index.d.ts"]
     }
   }
 }

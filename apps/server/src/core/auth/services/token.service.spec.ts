@@ -42,3 +42,29 @@ describe('TokenService.generateApiToken', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('TokenService.generateAttachmentToken', () => {
+  const opts = { attachmentId: 'a1', pageId: 'p1', workspaceId: 'ws_1' };
+
+  it('lives one hour and is cached publicly when no lifetime is given', async () => {
+    const { service, jwtService } = createService();
+
+    const payload = jwtService.decode(
+      await service.generateAttachmentToken(opts),
+    );
+
+    expect(payload.exp - payload.iat).toBe(3600);
+    expect(payload).not.toHaveProperty('expiring');
+  });
+
+  it('lives only as long as asked and marks itself as belonging to an expiring link', async () => {
+    const { service, jwtService } = createService();
+
+    const payload = jwtService.decode(
+      await service.generateAttachmentToken({ ...opts, expiresInSeconds: 600 }),
+    );
+
+    expect(payload.exp - payload.iat).toBe(600);
+    expect(payload.expiring).toBe(true);
+  });
+});

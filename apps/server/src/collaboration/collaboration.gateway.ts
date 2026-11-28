@@ -3,7 +3,11 @@ import { IncomingMessage } from 'http';
 import { WebSocket } from 'ws';
 import { AuthenticationExtension } from './extensions/authentication.extension';
 import { PersistenceExtension } from './extensions/persistence.extension';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { EnvironmentService } from '../integrations/environment/environment.service';
 import {
   createRetryStrategy,
@@ -37,6 +41,7 @@ export class CollaborationGateway {
   private readonly redisSync: RedisSyncExtension<CollabEventHandlers> | null =
     null;
   private readonly withRedis: boolean;
+  private readonly eventHandlers: CollabEventHandlers;
 
   constructor(
     private authenticationExtension: AuthenticationExtension,
@@ -59,6 +64,8 @@ export class CollaborationGateway {
       ],
     });
 
+    this.eventHandlers = this.collabEventsService.getHandlers(this.hocuspocus);
+
     if (this.withRedis) {
       // @ts-ignore
       this.redisSync = new RedisSyncExtension({
@@ -79,7 +86,7 @@ export class CollaborationGateway {
         pack,
         unpack,
         // @ts-ignore
-        customEvents: this.collabEventsService.getHandlers(this.hocuspocus),
+        customEvents: this.eventHandlers,
       });
       this.hocuspocus.configuration.extensions.push(this.redisSync);
       // @ts-ignore
@@ -112,9 +119,13 @@ export class CollaborationGateway {
       };
     }
 
-    const connection = this.hocuspocus.handleConnection(socket, toWebRequest(request));
+    const connection = this.hocuspocus.handleConnection(
+      socket,
+      toWebRequest(request),
+    );
     return {
-      onMessage: (data: Buffer) => connection.handleMessage(new Uint8Array(data)),
+      onMessage: (data: Buffer) =>
+        connection.handleMessage(new Uint8Array(data)),
       onClose: (code: number, reason: Buffer) =>
         connection.handleClose({ code, reason: reason.toString() }),
     };
@@ -163,12 +174,46 @@ export class CollaborationGateway {
     payload: Parameters<CollabEventHandlers[TName]>[1],
     onlyIfOpen = false,
   ) {
-    return this.redisSync?.handleEvent(
+    if (this.redisSync) {
+      return this.redisSync.handleEvent(
+        eventName,
+        documentName,
+        payload,
+        onlyIfOpen,
+      );
+    }
+    return this.handleEventLocally(
       eventName,
       documentName,
       payload,
       onlyIfOpen,
     );
+  }
+
+  // Without Redis this process is the only sync server, so its own documents
+  // are the live ones; same contract as the relay's handleEvent.
+  private async handleEventLocally<TName extends keyof CollabEventHandlers>(
+    eventName: TName,
+    documentName: string,
+    payload: Parameters<CollabEventHandlers[TName]>[1],
+    onlyIfOpen: boolean,
+  ): Promise<Awaited<ReturnType<CollabEventHandlers[TName]>> | undefined> {
+    // the live documents are in a separate sync server this process cannot
+    // reach without Redis: refuse rather than edit a copy that gets overwritten
+    if (!this.environmentService.isCollabEmbedded()) {
+      throw new ServiceUnavailableException(
+        'The collaboration server cannot be reached without Redis',
+      );
+    }
+    if (onlyIfOpen && !this.hocuspocus.documents.has(documentName)) return;
+    if (!this.eventHandlers[eventName]) {
+      throw new Error(`Invalid eventName: ${String(eventName)}`);
+    }
+    const handler = this.eventHandlers[eventName] as (
+      documentName: string,
+      payload: unknown,
+    ) => Promise<Awaited<ReturnType<CollabEventHandlers[TName]>>>;
+    return handler(documentName, payload);
   }
 
   openDirectConnection(documentName: string, context?: any) {
@@ -179,6 +224,7 @@ export class CollaborationGateway {
    *Can be used before calling openDirectConnection directly
    */
   async lockDocument(documentName: string) {
+    this.assertRedis();
     return this.redisSync.lockDocument(documentName);
   }
 
@@ -186,7 +232,16 @@ export class CollaborationGateway {
    *Releases a document lock and stops the interval that maintains it.
    */
   async releaseLock(documentName: string) {
+    this.assertRedis();
     return this.redisSync.releaseLock(documentName);
+  }
+
+  private assertRedis() {
+    if (!this.redisSync) {
+      throw new Error(
+        'Document locks need Redis (COLLAB_DISABLE_REDIS is true)',
+      );
+    }
   }
 
   async destroy(collabWsAdapter: CollabWsAdapter): Promise<void> {

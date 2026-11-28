@@ -26,6 +26,8 @@ import { MailService } from '../../../integrations/mail/mail.service';
 import ChangePasswordEmail from '@docmost/transactional/emails/change-password-email';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import ForgotPasswordEmail from '@docmost/transactional/emails/forgot-password-email';
+import { UserPasskeyRepo } from '@docmost/db/repos/passkey/user-passkey.repo';
+import { AccessTokenRepo } from '@docmost/db/repos/access-token/access-token.repo';
 import { UserTokenRepo } from '@docmost/db/repos/user-token/user-token.repo';
 import { PasswordResetDto } from '../dto/password-reset.dto';
 import { User, UserToken, Workspace } from '@docmost/db/types/entity.types';
@@ -63,6 +65,10 @@ export class AuthService {
     @InjectKysely() private readonly db: KyselyDB,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
     private wsService: WsService,
+    private userPasskeyRepo: UserPasskeyRepo,
+    // optional in the signature only, for specs that construct the service
+    // without it; Nest always injects it
+    private accessTokenRepo?: AccessTokenRepo,
   ) {}
 
   async login(loginDto: LoginDto, workspaceId: string) {
@@ -142,14 +148,26 @@ export class AuthService {
     }
 
     const newPasswordHash = await hashPassword(dto.newPassword);
-    await this.userRepo.updateUser(
-      {
-        password: newPasswordHash,
-        hasGeneratedPassword: false,
-      },
-      userId,
-      workspaceId,
-    );
+    let revoked = 0;
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUser(
+        {
+          password: newPasswordHash,
+          hasGeneratedPassword: false,
+        },
+        userId,
+        workspaceId,
+        trx,
+      );
+      // a token made with a stolen session must not outlive the new password
+      revoked =
+        (await this.accessTokenRepo?.revokeAllForUser(
+          userId,
+          workspaceId,
+          trx,
+        )) ?? 0;
+    });
+    this.logTokensRevoked(userId, 'password_change', revoked);
 
     if (currentSessionId) {
       await this.userSessionRepo.deleteAllExceptCurrent(
@@ -258,6 +276,7 @@ export class AuthService {
 
     const newPasswordHash = await hashPassword(passwordResetDto.newPassword);
 
+    let revoked = 0;
     await executeTx(this.db, async (trx) => {
       await this.userRepo.updateUser(
         {
@@ -274,7 +293,18 @@ export class AuthService {
         .where('userId', '=', user.id)
         .where('type', '=', UserTokenType.FORGOT_PASSWORD)
         .execute();
+
+      await this.userPasskeyRepo.deleteAllForUser(user.id, workspace.id, trx);
+      revoked =
+        (await this.accessTokenRepo?.revokeAllForUser(
+          user.id,
+          workspace.id,
+          trx,
+        )) ?? 0;
     });
+    // the reset request is not signed in: the person is the actor
+    this.auditService.setActorId(user.id);
+    this.logTokensRevoked(user.id, 'password_reset', revoked);
 
     await this.userSessionRepo.deleteByUserId(user.id, workspace.id);
     this.wsService.disconnectUser(user.id);
@@ -326,6 +356,21 @@ export class AuthService {
 
     const authToken = await this.sessionService.createSessionAndToken(user);
     return { authToken };
+  }
+
+  private logTokensRevoked(
+    userId: string,
+    reason: 'password_reset' | 'password_change',
+    count: number,
+  ) {
+    if (count === 0) return;
+    this.auditService.log({
+      event: AuditEvent.ACCESS_TOKEN_REVOKED,
+      // every token of the person, so the resource is the person
+      resourceType: AuditResource.USER,
+      resourceId: userId,
+      metadata: { reason, count },
+    });
   }
 
   async verifyUserToken(

@@ -59,6 +59,21 @@ export class EnvironmentVariables {
   COLLAB_URL: string;
 
   @IsOptional()
+  @ValidateIf((obj) => obj.COLLAB_MESSAGE_SIZE_LIMIT !== '')
+  @Matches(/^\d+(\.\d+)?\s*(b|kb|mb|gb)?$/i, {
+    message:
+      'COLLAB_MESSAGE_SIZE_LIMIT must be a size such as 16mb or a number of bytes',
+  })
+  COLLAB_MESSAGE_SIZE_LIMIT: string;
+
+  @IsOptional()
+  @ValidateIf((obj) => obj.COLLAB_EXTERNAL !== '')
+  @Matches(/^(true|false)$/i, {
+    message: 'COLLAB_EXTERNAL must be true or false',
+  })
+  COLLAB_EXTERNAL: string;
+
+  @IsOptional()
   CLOUD: boolean;
 
   @IsOptional()

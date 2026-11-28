@@ -191,6 +191,25 @@ export class WorkspaceRepo {
       .executeTakeFirst();
   }
 
+  async updateAgentMcpSettings(
+    workspaceId: string,
+    prefKey: string,
+    prefValue: string | boolean,
+    trx?: KyselyTransaction,
+  ) {
+    const db = dbOrTx(this.db, trx);
+    return db
+      .updateTable('workspaces')
+      .set({
+        settings: sql`COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('agentMcp', COALESCE(settings->'agentMcp', '{}'::jsonb)
+                || jsonb_build_object('${sql.raw(prefKey)}', ${sql.lit(prefValue)}))`,
+        updatedAt: new Date(),
+      })
+      .where('id', '=', workspaceId)
+      .execute();
+  }
+
   async updateAiSettings(
     workspaceId: string,
     prefKey: string,

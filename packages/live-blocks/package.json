@@ -1,0 +1,29 @@
+{
+  "name": "@docmost/live-blocks",
+  "homepage": "https://docmost.com",
+  "private": true,
+  "sideEffects": [
+    "./src/**/register.ts",
+    "./dist/**/register.js",
+    "./src/index.ts",
+    "./dist/index.js"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "main": "dist/index.js",
+  "module": "./src/index.ts",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "fractional-indexing-jittered": "1.0.0"
+  },
+  "peerDependencies": {
+    "yjs": "^13.6.30"
+  },
+  "devDependencies": {
+    "vitest": "4.1.12",
+    "yjs": "13.6.30"
+  }
+}

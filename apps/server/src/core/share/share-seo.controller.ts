@@ -10,6 +10,7 @@ import { Workspace } from '@docmost/db/types/entity.types';
 import { htmlEscape } from '../../common/helpers/html-escaper';
 import { getWorkspaceDefaultLocale } from '../workspace/workspace.util';
 import { DEFAULT_LOCALE } from '../workspace/workspace.constants';
+import { ShareExpiredException } from '../share-expiry/share-expiry.service';
 
 @Controller('share')
 export class ShareSeoController {
@@ -80,6 +81,11 @@ export class ShareSeoController {
         title = shared.page.title;
         searchIndexing = shared.share.searchIndexing;
       } catch (err) {
+        // An expired link gets the plain app page with no title, kept out of
+        // search results. Copies made before expiry cannot be recalled.
+        if (err instanceof ShareExpiredException) {
+          return this.sendIndex(indexFilePath, res, { noindex: true });
+        }
         return this.sendIndex(indexFilePath, res);
       }
 
@@ -109,7 +115,18 @@ export class ShareSeoController {
     }
   }
 
-  sendIndex(indexFilePath: string, res: FastifyReply) {
+  sendIndex(
+    indexFilePath: string,
+    res: FastifyReply,
+    opts?: { noindex?: boolean },
+  ) {
+    if (opts?.noindex) {
+      const html = fs
+        .readFileSync(indexFilePath, 'utf8')
+        .replace('<!--meta-tags-->', () => '<meta name="robots" content="noindex" />');
+      res.type('text/html').send(html);
+      return;
+    }
     const stream = fs.createReadStream(indexFilePath);
     res.type('text/html').send(stream);
   }

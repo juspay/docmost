@@ -115,6 +115,7 @@ export class SearchController {
     ) {
       throw new NotFoundException('Share not found');
     }
+    await this.shareService.assertShareUsable(share);
 
     if (this.environmentService.getSearchDriver() === 'typesense') {
       return this.searchTypesense(searchDto, {

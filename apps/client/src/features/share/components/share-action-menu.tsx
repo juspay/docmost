@@ -1,14 +1,19 @@
 import { Menu, ActionIcon, Text } from "@mantine/core";
 import React from "react";
 import {
+  IconCheck,
   IconCopy,
   IconDots,
   IconFileDescription,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { useTranslation } from "react-i18next";
-import { ISharedItem } from "@/features/share/types/share.types.ts";
+import {
+  ISharedItem,
+  SharePeriodDays,
+} from "@/features/share/types/share.types.ts";
 import {
   buildPageUrl,
   buildSharedPageUrl,
@@ -17,6 +22,12 @@ import { useClipboard } from "@/hooks/use-clipboard";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import { useDeleteShareMutation } from "@/features/share/queries/share-query.ts";
+import {
+  useRenewShareExpiryMutation,
+  useSetShareExpiryMutation,
+} from "@/features/share/queries/share-expiry-query.ts";
+
+const PERIOD_DAYS: Array<SharePeriodDays | null> = [null, 1, 7, 30];
 
 interface Props {
   share: ISharedItem;
@@ -26,6 +37,9 @@ export default function ShareActionMenu({ share }: Props) {
   const navigate = useNavigate();
   const clipboard = useClipboard();
   const deleteShareMutation = useDeleteShareMutation();
+  const setExpiry = useSetShareExpiryMutation(share.id);
+  const renewExpiry = useRenewShareExpiryMutation(share.id);
+  const canEdit = share.space?.userRole !== "reader";
 
   const openPage = () => {
     const pageLink = buildPageUrl(
@@ -91,11 +105,43 @@ export default function ShareActionMenu({ share }: Props) {
           >
             {t("Open page")}
           </Menu.Item>
+          <Menu.Divider />
+          <Menu.Label>{t("Link expires")}</Menu.Label>
+          {PERIOD_DAYS.map((days) => (
+            <Menu.Item
+              key={days ?? 0}
+              disabled={!canEdit}
+              onClick={() => setExpiry.mutate(days)}
+              rightSection={
+                (share.periodDays ?? null) === days ? (
+                  <IconCheck size={14} />
+                ) : null
+              }
+            >
+              {days === null
+                ? t("Never")
+                : days === 1
+                  ? t("1 day")
+                  : days === 7
+                    ? t("7 days")
+                    : t("30 days")}
+            </Menu.Item>
+          ))}
+          {share.expiresAt && (
+            <Menu.Item
+              disabled={!canEdit}
+              onClick={() => renewExpiry.mutate()}
+              leftSection={<IconRefresh size={16} />}
+            >
+              {t("Renew")}
+            </Menu.Item>
+          )}
+          <Menu.Divider />
           <Menu.Item
             c="red"
             onClick={openDeleteModal}
             leftSection={<IconTrash size={16} />}
-            disabled={share.space?.userRole === "reader"}
+            disabled={!canEdit}
           >
             {t("Delete share")}
           </Menu.Item>

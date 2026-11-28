@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import ms, { StringValue } from 'ms';
+import * as bytes from 'bytes';
 
 @Injectable()
 export class EnvironmentService {
@@ -76,7 +77,10 @@ export class EnvironmentService {
     let interval: number;
     try {
       interval = ms(
-        this.configService.get<string>('PAGE_HISTORY_INTERVAL', '5m') as StringValue,
+        this.configService.get<string>(
+          'PAGE_HISTORY_INTERVAL',
+          '5m',
+        ) as StringValue,
       );
     } catch (err) {
       interval = NaN;
@@ -211,12 +215,20 @@ export class EnvironmentService {
   }
 
   getUnsplashAccessKey(): string | undefined {
-    return this.configService.get<string>('UNSPLASH_ACCESS_KEY')?.trim() || undefined;
+    return (
+      this.configService.get<string>('UNSPLASH_ACCESS_KEY')?.trim() || undefined
+    );
   }
 
   isCloud(): boolean {
     const cloudConfig = this.getConfigValue('CLOUD', 'false').toLowerCase();
     return cloudConfig === 'true';
+  }
+
+  isAgentMcpEnabled(): boolean {
+    return (
+      this.getConfigValue('AGENT_MCP_ENABLED', 'true').toLowerCase() !== 'false'
+    );
   }
 
   isSelfHosted(): boolean {
@@ -241,6 +253,42 @@ export class EnvironmentService {
 
   getCollabUrl(): string {
     return this.getConfigValue('COLLAB_URL');
+  }
+
+  /** Largest websocket message the collab server accepts, in bytes. */
+  getCollabMessageSizeLimit(): number {
+    // upstream's limit before this setting existed, so an upgrade changes nothing
+    const fallback = 100 * 1024 * 1024;
+    const limit = bytes.parse(
+      this.getConfigValue('COLLAB_MESSAGE_SIZE_LIMIT', '100mb'),
+    );
+    // a full page sync is one message, so a tiny limit would break editing
+    if (!Number.isFinite(limit)) return fallback;
+    // ws keeps maxPayload | 0, so 2 GiB or more would turn the cap off
+    const ceiling = 2 ** 31 - 1;
+    if (limit > ceiling) {
+      new Logger(EnvironmentService.name).warn(
+        `COLLAB_MESSAGE_SIZE_LIMIT ${this.getConfigValue('COLLAB_MESSAGE_SIZE_LIMIT')} (${limit} bytes) is above the largest limit ws supports; using ${ceiling} bytes`,
+      );
+      return ceiling;
+    }
+    return Math.max(limit, 1024 * 1024);
+  }
+
+  /**
+   * Whether the documents people edit live in a sync server outside this
+   * process. COLLAB_EXTERNAL says so explicitly; without it, a set COLLAB_URL
+   * is taken to mean a separate sync server.
+   */
+  isCollabExternal(): boolean {
+    const explicit = this.getConfigValue('COLLAB_EXTERNAL')?.trim();
+    if (explicit) return explicit.toLowerCase() === 'true';
+    return !!this.getCollabUrl()?.trim();
+  }
+
+  /** Whether browsers sync with the collaboration server inside this process. */
+  isCollabEmbedded(): boolean {
+    return !this.isCollabExternal();
   }
 
   isCollabDisableRedis(): boolean {

@@ -21,6 +21,7 @@
     "migration:latest": "tsx src/database/migrate.ts latest",
     "migration:redo": "tsx src/database/migrate.ts redo",
     "migration:reset": "tsx src/database/migrate.ts down-to NO_MIGRATIONS",
+    "mindspace:import": "node dist/mindspace-import/main",
     "migration:codegen": "kysely-codegen --dialect=postgres --camel-case --env-file=../../.env --out-file=./src/database/types/db.d.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
@@ -39,6 +40,7 @@
     "@azure/storage-blob": "12.31.0",
     "@clickhouse/client": "1.18.2",
     "@docmost/base-formula": "workspace:*",
+    "@docmost/live-blocks": "workspace:*",
     "@docmost/pdf-inspector": "1.9.6",
     "@fastify/cookie": "11.1.2",
     "@fastify/multipart": "10.1.9",
@@ -66,6 +68,7 @@
     "@nestjs/websockets": "11.2.11",
     "@node-saml/passport-saml": "5.1.0",
     "@react-email/render": "2.2.0",
+    "@simplewebauthn/server": "13.3.0",
     "@socket.io/redis-adapter": "8.3.0",
     "@turbopuffer/turbopuffer": "^2.8.0",
     "ai": "6.0.285",
@@ -197,7 +200,8 @@
       "^@docmost/ee/(.*)$": "<rootDir>/ee/$1",
       "^src/(.*)$": "<rootDir>/$1",
       "^@docmost/base-formula/server$": "<rootDir>/../../../packages/base-formula/src/index.server.ts",
-      "^@docmost/base-formula/client$": "<rootDir>/../../../packages/base-formula/src/index.client.ts"
+      "^@docmost/base-formula/client$": "<rootDir>/../../../packages/base-formula/src/index.client.ts",
+      "^@docmost/live-blocks$": "<rootDir>/../../../packages/live-blocks/src/index.ts"
     }
   }
 }

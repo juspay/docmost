@@ -72,15 +72,20 @@ export class TokenService {
     attachmentId: string;
     pageId: string;
     workspaceId: string;
+    // seconds; used by links that expire, so a file link never outlives them
+    expiresInSeconds?: number;
   }): Promise<string> {
-    const { attachmentId, pageId, workspaceId } = opts;
+    const { attachmentId, pageId, workspaceId, expiresInSeconds } = opts;
     const payload: JwtAttachmentPayload = {
       attachmentId: attachmentId,
       pageId: pageId,
       workspaceId: workspaceId,
       type: JwtType.ATTACHMENT,
+      ...(expiresInSeconds ? { expiring: true } : {}),
     };
-    return this.jwtService.sign(payload, { expiresIn: '1h' });
+    return this.jwtService.sign(payload, {
+      expiresIn: expiresInSeconds ?? '1h',
+    });
   }
 
   async generateMfaToken(user: User, workspaceId: string): Promise<string> {
